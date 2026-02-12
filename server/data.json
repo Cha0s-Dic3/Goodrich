@@ -1,0 +1,98 @@
+{
+  "users": [
+    {
+      "id": "USR-001",
+      "name": "mupenzi cedrick",
+      "email": "mupenzicedrick58@gmail.com",
+      "passwordHash": "$2a$10$Lxy5rgyemO2/8v6WHjPqj.1mbSgOWR63yNT86TgyS.n/TfUQUt1/i",
+      "customerId": "CUST-001",
+      "createdAt": "2026-02-10T09:57:30.587Z",
+      "phone": "0780129985",
+      "avatarUrl": ""
+    },
+    {
+      "id": "USR-002",
+      "name": "ISHEMA Christian",
+      "email": "ishemachristian@gmail.com",
+      "passwordHash": "$2a$10$eyVr/pBKDf24N/BlApGAFurGK3rV/bT5/AiMPBWzW8tU0TSIs6Cwa",
+      "customerId": "CUST-002",
+      "createdAt": "2026-02-10T13:18:18.153Z",
+      "phone": "",
+      "avatarUrl": ""
+    }
+  ],
+  "customers": [
+    {
+      "id": "CUST-001",
+      "name": "mupenzi cedrick",
+      "phone": "0780129985",
+      "email": "mupenzicedrick58@gmail.com",
+      "addresses": [
+        "Kigali\nApt"
+      ],
+      "totalOrders": 1,
+      "totalSpent": 9500,
+      "joinedDate": "2026-02-10"
+    },
+    {
+      "id": "CUST-002",
+      "name": "ISHEMA Christian",
+      "phone": "",
+      "email": "ishemachristian@gmail.com",
+      "addresses": [],
+      "totalOrders": 0,
+      "totalSpent": 0,
+      "joinedDate": "2026-02-10"
+    }
+  ],
+  "products": [
+    {
+      "id": "1",
+      "name": "Small Eggs Tray",
+      "description": "Fresh farm eggs - Small size, 30 eggs per tray",
+      "category": "eggs",
+      "size": "small",
+      "quantity": 30,
+      "price": 4500,
+      "stock": 50,
+      "image": "small-eggs"
+    },
+    {
+      "id": "2",
+      "name": "Medium Eggs Tray",
+      "description": "Fresh farm eggs - Medium size, 30 eggs per tray",
+      "category": "eggs",
+      "size": "medium",
+      "quantity": 30,
+      "price": 5500,
+      "stock": 75,
+      "image": "medium-eggs"
+    },
+    {
+      "id": "3",
+      "name": "Large Eggs Tray",
+      "description": "Fresh farm eggs - Large size, 30 eggs per tray",
+      "category": "eggs",
+      "size": "large",
+      "quantity": 30,
+      "price": 6500,
+      "stock": 60,
+      "image": "large-eggs"
+    },
+    {
+      "id": "4",
+      "name": "Extra Large Eggs Tray",
+      "description": "Fresh farm eggs - Extra Large size, 30 eggs per tray",
+      "category": "eggs",
+      "size": "extra-large",
+      "quantity": 30,
+      "price": 7500,
+      "stock": 40,
+      "image": "xl-eggs"
+    }
+  ],
+  "orders": [],
+  "announcements": [],
+  "messages": [],
+  "gallery": []
+}
