@@ -11,6 +11,7 @@ export function AccountPage() {
     authUser,
     isUserLoggedIn,
     setCurrentPage,
+    uploadAvatar,
     updateUserProfile,
     userLogout,
     orders,
@@ -24,6 +25,7 @@ export function AccountPage() {
     avatarUrl: ''
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!isUserLoggedIn) {
@@ -79,6 +81,25 @@ export function AccountPage() {
       toast.error(err?.message || 'Failed to update profile');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAvatarUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    setIsUploadingAvatar(true);
+    try {
+      const avatarUrl = await uploadAvatar(file);
+      setFormData((prev) => ({ ...prev, avatarUrl }));
+      await updateUserProfile({ avatarUrl });
+      toast.success('Profile photo uploaded');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to upload profile photo');
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -200,18 +221,21 @@ export function AccountPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Profile Photo URL</label>
-                  <div className="flex gap-2">
+                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Profile Photo</label>
+                  <div className="flex items-center gap-3">
                     <Input
-                      name="avatarUrl"
-                      value={formData.avatarUrl}
-                      onChange={handleChange}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleAvatarUpload(e.target.files?.[0] || null)}
                       className="border-[#D2B48C] focus:border-[#FFD700]"
                     />
                     <div className="w-12 h-12 bg-[#F0EAD6] border-2 border-[#D2B48C] rounded-md flex items-center justify-center">
                       <Camera className="h-5 w-5 text-[#8B4513]" />
                     </div>
                   </div>
+                  {isUploadingAvatar && (
+                    <p className="text-xs text-[#6B5344] mt-2">Uploading photo...</p>
+                  )}
                 </div>
 
                 <div className="flex justify-end">

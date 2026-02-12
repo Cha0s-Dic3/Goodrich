@@ -121,6 +121,7 @@ interface AppContextType {
   // Gallery
   gallery: GalleryItem[];
   loadGallery: () => Promise<void>;
+  uploadGalleryImage: (file: File) => Promise<string>;
   addGalleryItem: (item: Omit<GalleryItem, 'id' | 'createdAt'>) => Promise<void>;
   updateGalleryItem: (id: string, item: Partial<GalleryItem>) => Promise<void>;
   deleteGalleryItem: (id: string) => Promise<void>;
@@ -146,6 +147,7 @@ interface AppContextType {
   authToken: string | null;
   userLogin: (token: string, user: UserAccount) => void;
   userLogout: () => void;
+  uploadAvatar: (file: File) => Promise<string>;
   updateUserProfile: (payload: Partial<UserAccount>) => Promise<void>;
 
   // Current Page
@@ -162,6 +164,23 @@ const fetchJson = async (url: string, options?: RequestInit) => {
     throw new Error(data.error || `Request failed (${res.status})`);
   }
   return res.json();
+};
+
+const uploadFile = async (url: string, file: File, token?: string | null) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Upload failed (${res.status})`);
+  }
+  const data = await res.json();
+  return data.url as string;
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -302,6 +321,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setGallery(prev => [data.item, ...prev]);
   };
 
+  const uploadGalleryImage = async (file: File) => {
+    return uploadFile('/api/uploads/gallery', file);
+  };
+
   const updateGalleryItem = async (id: string, item: Partial<GalleryItem>) => {
     const data = await fetchJson(`/api/admin/gallery/${id}`, {
       method: 'PATCH',
@@ -418,6 +441,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuthUser(data.user);
   };
 
+  const uploadAvatar = async (file: File) => {
+    if (!authToken) {
+      throw new Error('Please log in first');
+    }
+    return uploadFile('/api/uploads/avatar', file, authToken);
+  };
+
   // Cart functions
   const addToCart = (product: Product, quantity: number) => {
     setCart(prev => {
@@ -527,6 +557,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteAnnouncement,
         gallery,
         loadGallery,
+        uploadGalleryImage,
         addGalleryItem,
         updateGalleryItem,
         deleteGalleryItem,
@@ -544,6 +575,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         authToken,
         userLogin,
         userLogout,
+        uploadAvatar,
         updateUserProfile,
         currentPage: currentPageState,
         setCurrentPage

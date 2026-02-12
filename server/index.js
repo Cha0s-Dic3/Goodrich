@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,12 +10,49 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'data.json');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 const app = express();
 app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: '2mb' }));
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+const buildUploadUrl = (filePath) => `/uploads/${filePath.replace(/\\/g, '/')}`;
+
+const createUploader = (subDir) => {
+  const storage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+      try {
+        const targetDir = path.join(UPLOADS_DIR, subDir);
+        await fs.mkdir(targetDir, { recursive: true });
+        cb(null, targetDir);
+      } catch (err) {
+        cb(err, '');
+      }
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      const safeExt = ext || '.jpg';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+    }
+  });
+  return multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image uploads are allowed'));
+      }
+    }
+  });
+};
+
+const avatarUpload = createUploader('avatars');
+const galleryUpload = createUploader('gallery');
 
 const emptyData = () => ({
   users: [],
@@ -186,6 +224,22 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       avatarUrl: user.avatarUrl || ''
     }
   });
+});
+
+app.post('/api/uploads/avatar', authMiddleware, avatarUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  const relative = path.relative(UPLOADS_DIR, req.file.path);
+  return res.json({ url: buildUploadUrl(relative) });
+});
+
+app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  const relative = path.relative(UPLOADS_DIR, req.file.path);
+  return res.json({ url: buildUploadUrl(relative) });
 });
 
 app.patch('/api/auth/me', authMiddleware, async (req, res) => {
