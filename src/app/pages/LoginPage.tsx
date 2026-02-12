@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 
 export function LoginPage() {
-  const { setCurrentPage, userLogin, isUserLoggedIn } = useApp();
+  const { setCurrentPage, userLogin, isUserLoggedIn, isAdmin } = useApp();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,6 +45,10 @@ export function LoginPage() {
     e.preventDefault();
 
     if (isSubmitting) return;
+    if (isAdmin) {
+      toast.error('Admin is logged in. Log out admin first.');
+      return;
+    }
 
     if (isLogin) {
       if (!formData.email || !formData.password) {

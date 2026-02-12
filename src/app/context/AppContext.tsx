@@ -139,6 +139,7 @@ interface AppContextType {
   // Admin Auth
   isAdmin: boolean;
   adminLogin: (username: string, password: string) => boolean;
+  adminLoginError: string | null;
   adminLogout: () => void;
 
   // User auth
@@ -200,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('isAdmin') === 'true';
   });
+  const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
 
   const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('isUserLoggedIn') === 'true';
@@ -495,18 +497,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Admin functions
   const adminLogin = (username: string, password: string): boolean => {
+    if (isUserLoggedIn) {
+      setAdminLoginError('User is logged in. Log out user account first.');
+      return false;
+    }
     if (username === 'Goodrich' && password === '123') {
       setIsAdmin(true);
+      setAdminLoginError(null);
       return true;
     }
+    setAdminLoginError('Invalid admin credentials.');
     return false;
   };
 
   const adminLogout = () => {
     setIsAdmin(false);
+    setAdminLoginError(null);
   };
 
   const userLogin = (token: string, user: UserAccount) => {
+    if (isAdmin) {
+      throw new Error('Admin is logged in. Log out admin first.');
+    }
     setAuthToken(token);
     setAuthUser(user);
   };
@@ -569,6 +581,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getLowStockItems,
         isAdmin,
         adminLogin,
+        adminLoginError,
         adminLogout,
         isUserLoggedIn,
         authUser,

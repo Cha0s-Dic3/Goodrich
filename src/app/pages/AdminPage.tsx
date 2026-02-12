@@ -16,7 +16,16 @@ import { GalleryManagement } from '../components/admin/GalleryManagement';
 import { toast } from 'sonner';
 
 export function AdminPage() {
-  const { isAdmin, adminLogin, loadOrders, loadCustomers, loadMessages, refreshProducts } = useApp();
+  const {
+    isAdmin,
+    isUserLoggedIn,
+    adminLogin,
+    adminLoginError,
+    loadOrders,
+    loadCustomers,
+    loadMessages,
+    refreshProducts
+  } = useApp();
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -27,13 +36,17 @@ export function AdminPage() {
       loadMessages();
       refreshProducts();
     }
-  }, [isAdmin, loadOrders, loadCustomers, loadMessages, refreshProducts]);
+  }, [isAdmin]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUserLoggedIn) {
+      toast.error('User is logged in. Log out user account first.');
+      return;
+    }
     const success = adminLogin(loginData.username, loginData.password);
     if (!success) {
-      toast.error('Invalid admin credentials. Use username "Goodrich" and password "123".');
+      toast.error(adminLoginError || 'Invalid admin credentials. Use username "Goodrich" and password "123".');
     }
   };
   

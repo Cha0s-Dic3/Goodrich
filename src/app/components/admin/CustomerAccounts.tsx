@@ -26,7 +26,7 @@ export function CustomerAccounts() {
   useEffect(() => {
     loadCustomers();
     loadOrders('admin');
-  }, [loadCustomers, loadOrders]);
+  }, []);
 
   const getCustomer = (customerId: string) =>
     customers.find((customer) => customer.id === customerId);

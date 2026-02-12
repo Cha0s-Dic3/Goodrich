@@ -34,7 +34,7 @@ export function AccountPage() {
       return;
     }
     loadOrders('user');
-  }, [isUserLoggedIn, loadOrders, setCurrentPage]);
+  }, [isUserLoggedIn, setCurrentPage]);
 
   useEffect(() => {
     if (authUser) {

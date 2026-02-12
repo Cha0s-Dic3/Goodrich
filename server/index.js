@@ -21,6 +21,31 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 const buildUploadUrl = (filePath) => `/uploads/${filePath.replace(/\\/g, '/')}`;
 
+const resolveUploadFilePath = (urlValue) => {
+  if (typeof urlValue !== 'string' || !urlValue.startsWith('/uploads/')) {
+    return null;
+  }
+  const relativePath = decodeURIComponent(urlValue.replace('/uploads/', ''));
+  const normalized = path.normalize(relativePath);
+  if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+    return null;
+  }
+  return path.join(UPLOADS_DIR, normalized);
+};
+
+const deleteUploadIfExists = async (urlValue) => {
+  const filePath = resolveUploadFilePath(urlValue);
+  if (!filePath) return;
+  try {
+    await fs.unlink(filePath);
+  } catch (err) {
+    // Ignore missing files; cleanup is best-effort.
+    if (err && err.code !== 'ENOENT') {
+      console.error('Failed to delete upload:', err.message);
+    }
+  }
+};
+
 const createUploader = (subDir) => {
   const storage = multer.diskStorage({
     destination: async (req, file, cb) => {
@@ -253,7 +278,13 @@ app.patch('/api/auth/me', authMiddleware, async (req, res) => {
   if (name) user.name = name;
   if (email) user.email = email;
   if (typeof phone === 'string') user.phone = phone;
-  if (typeof avatarUrl === 'string') user.avatarUrl = avatarUrl;
+  if (typeof avatarUrl === 'string') {
+    const oldAvatarUrl = user.avatarUrl;
+    user.avatarUrl = avatarUrl;
+    if (oldAvatarUrl && oldAvatarUrl !== avatarUrl) {
+      await deleteUploadIfExists(oldAvatarUrl);
+    }
+  }
 
   const customer = data.customers.find((entry) => entry.id === user.customerId);
   if (customer) {
@@ -437,7 +468,11 @@ app.patch('/api/admin/gallery/:id', async (req, res) => {
   if (title) item.title = title;
   if (typeof description === 'string') item.description = description;
   if (category) item.category = category;
-  if (imageUrl) item.imageUrl = imageUrl;
+  if (imageUrl && imageUrl !== item.imageUrl) {
+    const oldImageUrl = item.imageUrl;
+    item.imageUrl = imageUrl;
+    await deleteUploadIfExists(oldImageUrl);
+  }
   item.updatedAt = new Date().toISOString();
 
   await saveData(data);
@@ -447,7 +482,11 @@ app.patch('/api/admin/gallery/:id', async (req, res) => {
 app.delete('/api/admin/gallery/:id', async (req, res) => {
   const { id } = req.params;
   const data = await loadData();
+  const existing = data.gallery.find((entry) => entry.id === id);
   data.gallery = data.gallery.filter((entry) => entry.id !== id);
+  if (existing?.imageUrl) {
+    await deleteUploadIfExists(existing.imageUrl);
+  }
   await saveData(data);
   res.json({ ok: true });
 });

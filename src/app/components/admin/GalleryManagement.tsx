@@ -16,125 +16,90 @@ const categories = [
 ];
 
 export function GalleryManagement() {
-  const { gallery, loadGallery, addGalleryItem, updateGalleryItem, deleteGalleryItem } = useApp();
+  const { gallery, loadGallery, addGalleryItem, updateGalleryItem, deleteGalleryItem, uploadGalleryImage } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
-  const maxImageBytes = 500* 1024 * 1024;
-  const minDimension = 250;
-  const maxDimension = 2048;
-  const aspectTolerance = 0.05;
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: 'facilities' as GalleryItem['category'],
-    imageUrl: ''
+    category: 'facilities' as GalleryItem['category']
   });
   const [editData, setEditData] = useState<Partial<GalleryItem>>({});
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState('');
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImagePreview, setEditImagePreview] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     loadGallery();
-  }, [loadGallery]);
+  }, []);
 
   const resetForm = () => {
-    setFormData({ title: '', description: '', category: 'facilities', imageUrl: '' });
+    setFormData({ title: '', description: '', category: 'facilities' });
+    setNewImageFile(null);
+    setNewImagePreview('');
   };
 
-  const validateImageDataUrl = (dataUrl: string) => {
-    return new Promise<boolean>((resolve) => {
-      const image = new Image();
-      image.onload = () => {
-        const width = image.naturalWidth;
-        const height = image.naturalHeight;
-        const ratio = width / height;
-        if (width < minDimension || height < minDimension) {
-          toast.error(`Image must be at least ${minDimension} x ${minDimension}px`);
-          resolve(false);
-          return;
-        }
-        if (width > maxDimension || height > maxDimension) {
-          toast.error(`Image must be ${maxDimension} x ${maxDimension}px or smaller`);
-          resolve(false);
-          return;
-        }
-        if (Math.abs(ratio - 1) > aspectTolerance) {
-          toast.error('Image must be square (1:1 aspect ratio)');
-          resolve(false);
-          return;
-        }
-        resolve(true);
-      };
-      image.onerror = () => {
-        toast.error('Unable to read image dimensions');
-        resolve(false);
-      };
-      image.src = dataUrl;
-    });
-  };
-
-  const readImageFile = async (file: File, onLoad: (dataUrl: string) => void) => {
+  const pickImage = (file: File | null, onFile: (f: File | null) => void, onPreview: (url: string) => void) => {
+    if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
+      toast.error('Please choose an image file');
       return;
     }
-    if (file.size > maxImageBytes) {
-      toast.error('Image must be under 1.5MB');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      if (typeof reader.result === 'string') {
-        const isValid = await validateImageDataUrl(reader.result);
-        if (isValid) {
-          onLoad(reader.result);
-        }
-      }
-    };
-    reader.onerror = () => toast.error('Failed to read image');
-    reader.readAsDataURL(file);
-  };
-
-  const handleNewImageFile = (file: File | null) => {
-    if (!file) return;
-    readImageFile(file, (dataUrl) => setFormData({ ...formData, imageUrl: dataUrl }));
-  };
-
-  const handleEditImageFile = (file: File | null) => {
-    if (!file) return;
-    readImageFile(file, (dataUrl) => setEditData({ ...editData, imageUrl: dataUrl }));
+    onFile(file);
+    onPreview(URL.createObjectURL(file));
   };
 
   const handleAdd = async () => {
-    if (!formData.title.trim() || !formData.imageUrl.trim()) {
-      toast.error('Please provide a title and image');
+    if (!formData.title.trim() || !newImageFile) {
+      toast.error('Please provide a title and image file');
       return;
     }
+
+    setIsUploading(true);
     try {
-      await addGalleryItem(formData);
+      const imageUrl = await uploadGalleryImage(newImageFile);
+      await addGalleryItem({ ...formData, imageUrl });
       resetForm();
       setShowNewForm(false);
       toast.success('Gallery item added');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to add gallery item');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleEdit = (item: GalleryItem) => {
     setEditingId(item.id);
     setEditData(item);
+    setEditImageFile(null);
+    setEditImagePreview(item.imageUrl);
   };
 
   const handleSave = async (id: string) => {
-    if (!editData.title?.trim() || !editData.imageUrl?.trim()) {
-      toast.error('Title and image URL are required');
+    if (!editData.title?.trim()) {
+      toast.error('Title is required');
       return;
     }
+
+    setIsUploading(true);
     try {
-      await updateGalleryItem(id, editData);
+      let imageUrl = editData.imageUrl;
+      if (editImageFile) {
+        imageUrl = await uploadGalleryImage(editImageFile);
+      }
+      await updateGalleryItem(id, { ...editData, imageUrl });
       setEditingId(null);
       setEditData({});
+      setEditImageFile(null);
+      setEditImagePreview('');
       toast.success('Gallery item updated');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update gallery item');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -152,10 +117,7 @@ export function GalleryManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl text-[#3D2817]">Gallery Management</h2>
-        <Button
-          onClick={() => setShowNewForm(true)}
-          className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
-        >
+        <Button onClick={() => setShowNewForm(true)} className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Add Photo
         </Button>
@@ -166,92 +128,40 @@ export function GalleryManagement() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-[#6B5344]">Title *</label>
-              <Input
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="border-[#D2B48C]"
-              />
+              <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="border-[#D2B48C]" />
             </div>
             <div>
               <label className="text-xs text-[#6B5344]">Category *</label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value as GalleryItem['category'] })}
-              >
-                <SelectTrigger className="border-[#D2B48C]">
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value as GalleryItem['category'] })}>
+                <SelectTrigger className="border-[#D2B48C]"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
+                  {categories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="md:col-span-2">
-              <label className="text-xs text-[#6B5344]">Image Upload *</label>
-              <Input
-                type="file"
-                accept="image/png,image/jpeg"
-                onChange={(e) => handleNewImageFile(e.target.files?.[0] || null)}
-                className="border-[#D2B48C] bg-white"
-              />
-              <p className="mt-2 text-[11px] text-[#6B5344]">Square 1:1, 250-2048px. PNG or JPG. Max 1.5MB.</p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs text-[#6B5344]">Image Preview</label>
-              <div className="mt-2 flex items-center gap-4">
-                <div className="h-20 w-20 overflow-hidden rounded-md border border-[#D2B48C] bg-[#F0EAD6]">
-                  {formData.imageUrl ? (
-                    <img src={formData.imageUrl} alt="Preview" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[11px] text-[#6B5344]">
-                      No image
-                    </div>
-                  )}
-                </div>
-                <p className="text-[11px] text-[#6B5344]">Upload a square image to see preview.</p>
-              </div>
+              <label className="text-xs text-[#6B5344]">Image File *</label>
+              <Input type="file" accept="image/*" onChange={(e) => pickImage(e.target.files?.[0] || null, setNewImageFile, setNewImagePreview)} className="border-[#D2B48C] bg-white" />
             </div>
             <div className="md:col-span-2">
               <label className="text-xs text-[#6B5344]">Description</label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                className="border-[#D2B48C]"
-              />
+              <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} className="border-[#D2B48C]" />
             </div>
           </div>
+          {newImagePreview && <img src={newImagePreview} alt="Preview" className="mt-4 h-24 w-24 rounded-md object-cover border border-[#D2B48C]" />}
           <div className="flex gap-2 justify-end mt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowNewForm(false);
-                resetForm();
-              }}
-              className="border-[#C41E3A] text-[#C41E3A]"
-            >
-              <X className="h-4 w-4 mr-1" />
-              Cancel
+            <Button variant="outline" onClick={() => { setShowNewForm(false); resetForm(); }} className="border-[#C41E3A] text-[#C41E3A]">
+              <X className="h-4 w-4 mr-1" />Cancel
             </Button>
-            <Button
-              onClick={handleAdd}
-              className="bg-[#228B22] hover:bg-[#1a6b1a] text-white"
-            >
-              <Save className="h-4 w-4 mr-1" />
-              Save
+            <Button onClick={handleAdd} disabled={isUploading} className="bg-[#228B22] hover:bg-[#1a6b1a] text-white">
+              <Save className="h-4 w-4 mr-1" />{isUploading ? 'Uploading...' : 'Save'}
             </Button>
           </div>
         </Card>
       )}
 
       {gallery.length === 0 ? (
-        <Card className="p-10 bg-white border-2 border-[#D2B48C] text-center text-[#6B5344]">
-          No gallery items yet.
-        </Card>
+        <Card className="p-10 bg-white border-2 border-[#D2B48C] text-center text-[#6B5344]">No gallery items yet.</Card>
       ) : (
         <div className="grid gap-4">
           {gallery.map((item) => {
@@ -262,99 +172,39 @@ export function GalleryManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs text-[#6B5344]">Title *</label>
-                      <Input
-                        value={editData.title || ''}
-                        onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                        className="border-[#D2B48C]"
-                      />
+                      <Input value={editData.title || ''} onChange={(e) => setEditData({ ...editData, title: e.target.value })} className="border-[#D2B48C]" />
                     </div>
                     <div>
                       <label className="text-xs text-[#6B5344]">Category *</label>
-                      <Select
-                        value={editData.category || item.category}
-                        onValueChange={(value) => setEditData({ ...editData, category: value as GalleryItem['category'] })}
-                      >
-                        <SelectTrigger className="border-[#D2B48C]">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={editData.category || item.category} onValueChange={(value) => setEditData({ ...editData, category: value as GalleryItem['category'] })}>
+                        <SelectTrigger className="border-[#D2B48C]"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.value} value={category.value}>
-                              {category.label}
-                            </SelectItem>
-                          ))}
+                          {categories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-xs text-[#6B5344]">Image Upload *</label>
-                      <Input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        onChange={(e) => handleEditImageFile(e.target.files?.[0] || null)}
-                        className="border-[#D2B48C] bg-white"
-                      />
-                      <p className="mt-2 text-[11px] text-[#6B5344]">Square 1:1, 250-2048px. PNG or JPG. Max 1.5MB.</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="text-xs text-[#6B5344]">Image Preview</label>
-                      <div className="mt-2 flex items-center gap-4">
-                        <div className="h-20 w-20 overflow-hidden rounded-md border border-[#D2B48C] bg-[#F0EAD6]">
-                          {(editData.imageUrl || item.imageUrl) ? (
-                            <img
-                              src={editData.imageUrl || item.imageUrl}
-                              alt="Preview"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-[11px] text-[#6B5344]">
-                              No image
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[#6B5344]">Upload a square image to replace.</p>
-                      </div>
+                      <label className="text-xs text-[#6B5344]">Replace Image (optional)</label>
+                      <Input type="file" accept="image/*" onChange={(e) => pickImage(e.target.files?.[0] || null, setEditImageFile, setEditImagePreview)} className="border-[#D2B48C] bg-white" />
                     </div>
                     <div className="md:col-span-2">
                       <label className="text-xs text-[#6B5344]">Description</label>
-                      <Textarea
-                        value={editData.description || ''}
-                        onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                        rows={3}
-                        className="border-[#D2B48C]"
-                      />
+                      <Textarea value={editData.description || ''} onChange={(e) => setEditData({ ...editData, description: e.target.value })} rows={3} className="border-[#D2B48C]" />
                     </div>
+                    {editImagePreview && <img src={editImagePreview} alt="Preview" className="h-24 w-24 rounded-md object-cover border border-[#D2B48C]" />}
                     <div className="md:col-span-2 flex gap-2 justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingId(null);
-                          setEditData({});
-                        }}
-                        className="border-[#C41E3A] text-[#C41E3A]"
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Cancel
+                      <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditData({}); setEditImageFile(null); setEditImagePreview(''); }} className="border-[#C41E3A] text-[#C41E3A]">
+                        <X className="h-4 w-4 mr-1" />Cancel
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleSave(item.id)}
-                        className="bg-[#228B22] hover:bg-[#1a6b1a] text-white"
-                      >
-                        <Save className="h-4 w-4 mr-1" />
-                        Save
+                      <Button size="sm" onClick={() => handleSave(item.id)} disabled={isUploading} className="bg-[#228B22] hover:bg-[#1a6b1a] text-white">
+                        <Save className="h-4 w-4 mr-1" />{isUploading ? 'Uploading...' : 'Save'}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="w-full md:w-48 h-36 bg-[#F0EAD6] overflow-hidden rounded-lg">
-                      <img
-                        src={item.imageUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl text-[#3D2817] mb-2">{item.title}</h3>
@@ -362,23 +212,11 @@ export function GalleryManagement() {
                       <p className="text-xs text-[#6B5344]">Category: {item.category}</p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(item)}
-                        className="border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513] hover:text-white"
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
+                      <Button size="sm" variant="outline" onClick={() => handleEdit(item)} className="border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513] hover:text-white">
+                        <Edit className="h-4 w-4 mr-1" />Edit
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(item.id)}
-                        className="border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
+                      <Button size="sm" variant="outline" onClick={() => handleDelete(item.id)} className="border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white">
+                        <Trash2 className="h-4 w-4 mr-1" />Delete
                       </Button>
                     </div>
                   </div>

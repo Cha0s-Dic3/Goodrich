@@ -11,7 +11,7 @@ export function MessagesManagement() {
 
   useEffect(() => {
     loadMessages();
-  }, [loadMessages]);
+  }, []);
 
   const handleMarkRead = async (message: Message) => {
     if (message.status === 'read') return;

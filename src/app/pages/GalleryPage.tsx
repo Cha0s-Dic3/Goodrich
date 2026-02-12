@@ -9,7 +9,7 @@ export function GalleryPage() {
 
   useEffect(() => {
     loadGallery();
-  }, [loadGallery]);
+  }, []);
   
   const categories = [
     { id: 'all', label: 'All Photos' },

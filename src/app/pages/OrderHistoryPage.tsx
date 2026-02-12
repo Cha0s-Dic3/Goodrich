@@ -17,7 +17,7 @@ export function OrderHistoryPage() {
       return;
     }
     loadOrders('user');
-  }, [isUserLoggedIn, loadOrders, setCurrentPage]);
+  }, [isUserLoggedIn, setCurrentPage]);
 
   // Filter orders by status
   const filteredOrders = selectedStatus === 'all' 
