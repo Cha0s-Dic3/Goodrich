@@ -215,6 +215,7 @@ export function LoginPage() {
                   <div className="text-right">
                     <button
                       type="button"
+                      onClick={() => setCurrentPage('forgot-password')}
                       className="text-sm text-[#C41E3A] hover:text-[#A0522D] transition-colors"
                     >
                       Forgot Password?

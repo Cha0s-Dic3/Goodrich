@@ -8,7 +8,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from 'sonner';
 
 export function OrderHistoryPage() {
-  const { orders, setCurrentPage, loadOrders, isUserLoggedIn, clearOrderHistory } = useApp();
+  const {
+    orders,
+    payments,
+    setCurrentPage,
+    loadOrders,
+    loadPayments,
+    retryPayment,
+    isUserLoggedIn,
+    clearOrderHistory
+  } = useApp();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
   useEffect(() => {
@@ -17,6 +26,7 @@ export function OrderHistoryPage() {
       return;
     }
     loadOrders('user');
+    loadPayments('user');
   }, [isUserLoggedIn, setCurrentPage]);
 
   // Filter orders by status
@@ -60,6 +70,17 @@ export function OrderHistoryPage() {
     }
   };
 
+  const handleRetryPayment = async (ref: string) => {
+    try {
+      const newRef = await retryPayment(ref);
+      toast.success(`Payment retry started. New ref: ${newRef}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to retry payment');
+    }
+  };
+
+  const visiblePayments = payments.filter((payment) => !payment.orderId);
+
   return (
     <div className="min-h-screen bg-[#FFFDD0]">
       {/* Hero Section */}
@@ -80,6 +101,40 @@ export function OrderHistoryPage() {
       {/* Content */}
       <section className="py-16">
         <div className="container mx-auto px-4">
+          {visiblePayments.length > 0 && (
+            <Card className="p-6 bg-white border-2 border-[#D2B48C] mb-8">
+              <h2 className="text-2xl font-bold text-[#3D2817] mb-4">Pending Payments</h2>
+              <div className="space-y-3">
+                {visiblePayments.map((payment) => (
+                  <div
+                    key={`${payment.id}-${payment.ref}`}
+                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-[#F0EAD6] rounded-lg p-4"
+                  >
+                    <div>
+                      <p className="text-sm text-[#6B5344]">Ref: {payment.ref}</p>
+                      <p className="font-semibold text-[#3D2817]">
+                        Amount: {payment.amount?.toLocaleString?.() || payment.amount} FRW
+                      </p>
+                      <p className="text-xs text-[#6B5344]">
+                        Status: {payment.status}
+                        {payment.failureReason ? ` | ${payment.failureReason}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
+                        onClick={() => handleRetryPayment(payment.ref)}
+                        disabled={payment.status === 'successful'}
+                      >
+                        Retry Payment
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
           {orders.length === 0 ? (
             <Card className="p-12 bg-white border-2 border-[#D2B48C] text-center">
               <Package className="h-20 w-20 text-[#D2B48C] mx-auto mb-6" />
@@ -192,6 +247,12 @@ export function OrderHistoryPage() {
                           <Badge className={`border-2 ${getStatusColor(order.status)}`}>
                             {getStatusLabel(order.status)}
                           </Badge>
+                          {order.paymentStatus && (
+                            <p className="text-xs text-[#6B5344] mt-1">
+                              Payment: {order.paymentStatus}
+                              {order.paypackRef ? ` (${order.paypackRef})` : ''}
+                            </p>
+                          )}
                         </div>
                       </div>
 

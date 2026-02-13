@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lock, LayoutDashboard, Package, ShoppingCart, Users, TrendingUp, Megaphone, MessageSquare, Images } from 'lucide-react';
+import { Lock, LayoutDashboard, Package, ShoppingCart, Users, TrendingUp, Megaphone, MessageSquare, Images, CreditCard } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -13,6 +13,7 @@ import { AnnouncementManagement } from '../components/admin/AnnouncementManageme
 import { Reports } from '../components/admin/Reports';
 import { MessagesManagement } from '../components/admin/MessagesManagement';
 import { GalleryManagement } from '../components/admin/GalleryManagement';
+import { PaymentsManagement } from '../components/admin/PaymentsManagement';
 import { toast } from 'sonner';
 
 export function AdminPage() {
@@ -24,7 +25,8 @@ export function AdminPage() {
     loadOrders,
     loadCustomers,
     loadMessages,
-    refreshProducts
+    refreshProducts,
+    loadPayments
   } = useApp();
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -34,6 +36,7 @@ export function AdminPage() {
       loadOrders('admin');
       loadCustomers();
       loadMessages();
+      loadPayments('admin');
       refreshProducts();
     }
   }, [isAdmin]);
@@ -104,6 +107,7 @@ export function AdminPage() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'orders', label: 'Orders', icon: ShoppingCart },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
@@ -153,6 +157,7 @@ export function AdminPage() {
       <div className="container mx-auto px-4 py-8">
         {activeTab === 'dashboard' && <AdminDashboard />}
         {activeTab === 'orders' && <OrderManagement />}
+        {activeTab === 'payments' && <PaymentsManagement />}
         {activeTab === 'inventory' && <InventoryManagement />}
         {activeTab === 'announcements' && <AnnouncementManagement />}
         {activeTab === 'messages' && <MessagesManagement />}

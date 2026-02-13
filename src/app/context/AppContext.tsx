@@ -34,6 +34,8 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'processing' | 'out-for-delivery' | 'delivered' | 'cancelled';
   createdAt: string;
   notes?: string;
+  paypackRef?: string;
+  paymentStatus?: string;
 }
 
 export interface Customer {
@@ -86,6 +88,24 @@ export interface GalleryItem {
   updatedAt?: string;
 }
 
+export interface PendingPayment {
+  id: string;
+  ref: string;
+  status: string;
+  amount: number;
+  subtotal: number;
+  deliveryFee: number;
+  userId: string;
+  customerId: string;
+  orderPayload?: any;
+  orderId?: string;
+  createdAt: string;
+  updatedAt?: string;
+  failureReason?: string;
+  retriedFrom?: string;
+  retriedTo?: string;
+}
+
 interface AppContextType {
   // Products
   products: Product[];
@@ -106,6 +126,11 @@ interface AppContextType {
   updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
   loadOrders: (scope: 'user' | 'admin') => Promise<void>;
   clearOrderHistory: () => Promise<void>;
+
+  // Payments
+  payments: PendingPayment[];
+  loadPayments: (scope: 'user' | 'admin') => Promise<void>;
+  retryPayment: (ref: string) => Promise<string>;
 
   // Customers
   customers: Customer[];
@@ -193,6 +218,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
@@ -387,6 +413,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadPayments = async (scope: 'user' | 'admin') => {
+    if (scope === 'user' && !authToken) {
+      setPayments([]);
+      return;
+    }
+    try {
+      const data = await fetchJson(
+        scope === 'admin' ? '/api/admin/payments' : '/api/payments/my',
+        {
+          headers: authToken && scope === 'user' ? { Authorization: `Bearer ${authToken}` } : undefined
+        }
+      );
+      setPayments(data.payments || []);
+    } catch (err) {
+      setPayments([]);
+    }
+  };
+
+  const retryPayment = async (ref: string) => {
+    if (!authToken) {
+      throw new Error('Please log in first');
+    }
+    const data = await fetchJson(`/api/paypack/retry/${ref}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`
+      }
+    });
+    await loadPayments('user');
+    return data.ref as string;
+  };
+
   const addOrder = async (order: Omit<Order, 'id' | 'createdAt'>) => {
     if (!authToken) {
       return null;
@@ -560,6 +618,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateOrderStatus,
         loadOrders,
         clearOrderHistory,
+        payments,
+        loadPayments,
+        retryPayment,
         customers,
         loadCustomers,
         announcements,

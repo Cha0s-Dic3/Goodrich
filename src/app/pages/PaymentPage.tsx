@@ -7,7 +7,16 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 
 export function PaymentPage() {
-  const { cart, cartTotal, clearCart, setCurrentPage, addOrder, isUserLoggedIn, authUser } = useApp();
+  const {
+    cart,
+    cartTotal,
+    clearCart,
+    setCurrentPage,
+    isUserLoggedIn,
+    authUser,
+    authToken,
+    loadOrders
+  } = useApp();
   const [orderData, setOrderData] = useState({
     customerId: '',
     customerName: '',
@@ -26,8 +35,11 @@ export function PaymentPage() {
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(45);
   const timerRef = useRef<number | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const pollStartRef = useRef<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [paidAmount, setPaidAmount] = useState<number | null>(null);
   const [cardData, setCardData] = useState({
     cardNumber: '',
     cardName: '',
@@ -50,6 +62,19 @@ export function PaymentPage() {
     }
   }, [isUserLoggedIn, setCurrentPage]);
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, []);
+
   const deliveryFees: { [key in 'local' | 'regional' | 'national']: number } = {
     local: 3000,
     regional: 10000,
@@ -60,6 +85,10 @@ export function PaymentPage() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
     setIsProcessing(false);
     setProcessingMessage('Payment cancelled by user');
@@ -82,29 +111,59 @@ export function PaymentPage() {
   const handlePayment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (paymentMethod === 'card') {
-      if (!cardData.cardNumber || !cardData.cardName || !cardData.expiryDate || !cardData.cvv) {
-        toast.error('Please fill in all card details');
-        return;
-      }
+    if (paymentMethod !== 'mobile') {
+      toast.error('Only Mobile Money payments via Paypack are supported right now.');
+      return;
     }
 
-    if (paymentMethod === 'mobile') {
-      // Start simulated Mobile Money flow
+    if (!authToken) {
+      toast.error('Please sign in to continue payment');
+      setCurrentPage('login');
+      return;
+    }
+
+    if (!orderData.customerPhone) {
+      toast.error('Customer phone is required for Mobile Money payment');
+      return;
+    }
+
+    try {
       setIsProcessing(true);
       setProcessingMessage("Sending payment request to customer's phone...");
-      setCountdown(45);
+      setCountdown(120);
 
-      // Generate a mobile provider transaction reference (TXN123456)
-      const generatedRef = `TXN${Math.floor(100000 + Math.random() * 900000)}`;
-      setTxnRef(generatedRef);
+      const res = await fetch('/api/paypack/cashin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          order: {
+            ...orderData,
+            items: cart,
+            totalAmount: cartTotal,
+            deliveryFee,
+            deliveryZone: orderData.deliveryZone,
+            customerId: orderData.customerId || authUser?.customerId,
+            notes: `${orderData.notes || ''}\nProvider: ${mobileProvider.toUpperCase()}`.trim()
+          }
+        })
+      });
 
-      // T=2s: sent prompt to customer
-      setTimeout(() => {
-        setProcessingMessage(`Payment request sent to ${orderData.customerPhone}. Waiting for customer's reply...`);
-      }, 2000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to initiate payment');
+      }
 
-      // Start countdown timer (visual)
+      const ref = data.ref;
+      if (!ref) {
+        throw new Error('Missing payment reference');
+      }
+
+      setTxnRef(ref);
+      setProcessingMessage(`Payment request sent to ${orderData.customerPhone}. Waiting for confirmation...`);
+
       timerRef.current = window.setInterval(() => {
         setCountdown(prev => {
           if (prev <= 1) {
@@ -118,116 +177,75 @@ export function PaymentPage() {
         });
       }, 1000);
 
-      // Simulate customer replying and provider confirmation sequence
-      // T=8s: customer replies with '1 PIN' (simulated)
-      setTimeout(() => {
-        setProcessingMessage('Customer replied to payment prompt. Forwarding transfer command to provider...');
-      }, 8000);
-
-      // T=12s: provider requests final YES confirmation
-      setTimeout(() => {
-        setProcessingMessage('Provider requested final confirmation (YES). Waiting for customer...');
-      }, 12000);
-
-      // T=16s: customer confirms YES and provider processes transfer
-      setTimeout(() => {
-        setProcessingMessage('Provider processing transfer...');
-      }, 16000);
-
-      // T=18s: provider returns final transaction id and success
-      setTimeout(async () => {
-        const finalTxId = `ABC${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-        setTransactionId(finalTxId);
-        setProcessingMessage('Payment confirmed by provider. Completing order...');
-
-        // Create and save order after payment success
-        const newOrder = {
-          customerId: orderData.customerId || authUser?.customerId || `CUST-${Date.now()}`,
-          customerName: orderData.customerName,
-          customerPhone: orderData.customerPhone,
-          customerEmail: orderData.customerEmail,
-          items: [...cart],
-          totalAmount: cartTotal + deliveryFee,
-          deliveryZone: orderData.deliveryZone,
-          deliveryFee: deliveryFee,
-          deliveryAddress: orderData.deliveryAddress,
-          deliveryDate: orderData.deliveryDate,
-          deliveryTimeWindow: orderData.deliveryTimeWindow,
-          status: 'confirmed' as const,
-          notes: `${orderData.notes || ''}\nPayment: ${totalAmount.toLocaleString()} FRW | Provider: ${mobileProvider.toUpperCase()} | Ref: ${generatedRef} | TxID: ${finalTxId}`
-        };
-
+      pollStartRef.current = Date.now();
+      pollRef.current = window.setInterval(async () => {
         try {
-          const savedOrder = await addOrder(newOrder);
-          if (!savedOrder) {
-            throw new Error('Failed to save order');
+          const statusRes = await fetch(`/api/paypack/transactions/${ref}`, {
+            headers: { Authorization: `Bearer ${authToken}` }
+          });
+          const statusData = await statusRes.json().catch(() => ({}));
+          if (!statusRes.ok) {
+            throw new Error(statusData.error || 'Failed to check payment status');
           }
-          sessionStorage.removeItem('checkoutData');
-          setIsProcessing(false);
-          setPaymentComplete(true);
-          toast.success('Payment successful! Your order has been confirmed.');
-          clearCart();
+
+          const transaction = statusData.transaction || {};
+          const status = transaction.status;
+          if (status === 'successful') {
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            sessionStorage.removeItem('checkoutData');
+            setIsProcessing(false);
+            setPaymentComplete(true);
+            setProcessingMessage('Payment confirmed. Completing order...');
+            setPaidAmount(totalAmount);
+            await loadOrders('user');
+            toast.success('Payment successful! Your order has been confirmed.');
+            clearCart();
+            setTimeout(() => {
+              setCurrentPage('orders');
+            }, 1500);
+          } else if (status === 'failed') {
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            setIsProcessing(false);
+            toast.error('Payment failed. Please try again.');
+          } else {
+            setProcessingMessage('Waiting for customer confirmation...');
+          }
         } catch (err: any) {
+          setProcessingMessage(err?.message || 'Checking payment status...');
+        }
+
+        const startedAt = pollStartRef.current || Date.now();
+        if (Date.now() - startedAt > 120000) {
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
           setIsProcessing(false);
-          toast.error(err?.message || 'Failed to save order');
+          toast.error('Payment timed out. Please try again.');
         }
-
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
-
-        // Redirect to orders page after 3 seconds
-        setTimeout(() => {
-          setCurrentPage('orders');
-        }, 3000);
-      }, 18000);
-
-      return;
-    }
-
-    // Fallback / card & bank simulated processing
-    setIsProcessing(true);
-
-    // Simulate payment processing
-    setTimeout(async () => {
-      // Create and save order after payment success
-      const newOrder = {
-        customerId: orderData.customerId || authUser?.customerId || `CUST-${Date.now()}`,
-        customerName: orderData.customerName,
-        customerPhone: orderData.customerPhone,
-        customerEmail: orderData.customerEmail,
-        items: [...cart],
-        totalAmount: cartTotal + deliveryFee,
-        deliveryZone: orderData.deliveryZone,
-        deliveryFee: deliveryFee,
-        deliveryAddress: orderData.deliveryAddress,
-        deliveryDate: orderData.deliveryDate,
-        deliveryTimeWindow: orderData.deliveryTimeWindow,
-        status: 'pending' as const,
-        notes: orderData.notes
-      };
-
-      const savedOrder = await addOrder(newOrder);
-      if (!savedOrder) {
-        toast.error('Failed to save order');
-        setIsProcessing(false);
-        return;
-      }
-
-      // Clear checkout data from sessionStorage
-      sessionStorage.removeItem('checkoutData');
-
+      }, 4000);
+    } catch (err: any) {
       setIsProcessing(false);
-      setPaymentComplete(true);
-      toast.success('Payment successful! Your order has been confirmed.');
-      clearCart();
-
-      // Redirect to orders page after 3 seconds
-      setTimeout(() => {
-        setCurrentPage('orders');
-      }, 3000);
-    }, 2000);
+      toast.error(err?.message || 'Failed to initiate payment');
+    }
   };
 
   if (paymentComplete) {
@@ -247,7 +265,8 @@ export function PaymentPage() {
 
           <div className="bg-[#F0EAD6] rounded-lg p-4 mb-6 text-left">
             <p className="text-sm text-[#6B5344] mb-2">
-              <span className="font-semibold">Order Total:</span> {totalAmount.toLocaleString()} FRW
+              <span className="font-semibold">Order Total:</span>{' '}
+              {(paidAmount ?? totalAmount).toLocaleString()} FRW
             </p>
             <p className="text-sm text-[#6B5344]">
               <span className="font-semibold">Items:</span> {cart.length} product(s)
@@ -329,12 +348,13 @@ export function PaymentPage() {
                         value="card"
                         checked={paymentMethod === 'card'}
                         onChange={(e) => setPaymentMethod(e.target.value as 'card' | 'mobile' | 'bank')}
+                        disabled
                         className="w-5 h-5 accent-[#C41E3A]"
                       />
                       <CreditCard className="h-6 w-6 text-[#C41E3A]" />
                       <div>
                         <p className="font-semibold text-[#3D2817]">Credit/Debit Card</p>
-                        <p className="text-sm text-[#6B5344]">Visa, Mastercard</p>
+                        <p className="text-sm text-[#6B5344]">Visa, Mastercard (coming soon)</p>
                       </div>
                     </div>
                   </label>
@@ -352,12 +372,13 @@ export function PaymentPage() {
                         value="bank"
                         checked={paymentMethod === 'bank'}
                         onChange={(e) => setPaymentMethod(e.target.value as 'card' | 'mobile' | 'bank')}
+                        disabled
                         className="w-5 h-5 accent-[#C41E3A]"
                       />
                       <Building2 className="h-6 w-6 text-[#C41E3A]" />
                       <div>
                         <p className="font-semibold text-[#3D2817]">Bank Transfer</p>
-                        <p className="text-sm text-[#6B5344]">Direct bank deposit</p>
+                        <p className="text-sm text-[#6B5344]">Direct bank deposit (coming soon)</p>
                       </div>
                     </div>
                   </label>

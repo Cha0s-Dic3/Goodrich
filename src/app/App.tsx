@@ -12,6 +12,8 @@ import { ContactPage } from './pages/ContactPage';
 import { CartPage } from './pages/CartPage';
 import { AdminPage } from './pages/AdminPage';
 import { LoginPage } from './pages/LoginPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { PaymentPage } from './pages/PaymentPage';
 import { OrderHistoryPage } from './pages/OrderHistoryPage';
@@ -61,6 +63,10 @@ function AppContent() {
         setCurrentPage('admin');
       } else if (path === '/account') {
         setCurrentPage('account');
+      } else if (path === '/forgot-password') {
+        setCurrentPage('forgot-password');
+      } else if (path === '/reset-password') {
+        setCurrentPage('reset-password');
       }
     };
     syncFromPath();
@@ -86,6 +92,10 @@ function AppContent() {
         return <CartPage />;
       case 'login':
         return <LoginPage />;
+      case 'forgot-password':
+        return <ForgotPasswordPage />;
+      case 'reset-password':
+        return <ResetPasswordPage />;
       case 'checkout':
         return <CheckoutPage />;
       case 'payment':

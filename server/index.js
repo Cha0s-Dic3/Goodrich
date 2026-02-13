@@ -3,23 +3,131 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
+import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'data.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const DIST_PATH = path.join(__dirname, '../dist');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
+const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
+const FIREBASE_PRIVATE_KEY = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || '';
+const USE_FIREBASE_STORAGE = Boolean(
+  FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY && FIREBASE_STORAGE_BUCKET
+);
+const PAYPACK_CLIENT_ID = process.env.PAYPACK_CLIENT_ID || '';
+const PAYPACK_CLIENT_SECRET = process.env.PAYPACK_CLIENT_SECRET || '';
+const PAYPACK_WEBHOOK_SECRET = process.env.PAYPACK_WEBHOOK_SECRET || '';
+const PAYPACK_WEBHOOK_MODE = process.env.PAYPACK_WEBHOOK_MODE || 'production';
+const APP_BASE_URL = process.env.APP_BASE_URL || '';
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const SMTP_FROM = process.env.SMTP_FROM || '';
+
+const DELIVERY_FEES = {
+  local: 3000,
+  regional: 10000,
+  national: 15000
+};
 
 const app = express();
 app.use(cors({ origin: true, credentials: false }));
-app.use(express.json({ limit: '2mb' }));
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const buildUploadUrl = (filePath) => `/uploads/${filePath.replace(/\\/g, '/')}`;
+const FIREBASE_STORAGE_URL_PREFIX = FIREBASE_STORAGE_BUCKET
+  ? `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/`
+  : '';
+const FIREBASE_GCS_URL_PREFIX = FIREBASE_STORAGE_BUCKET
+  ? `https://storage.googleapis.com/${FIREBASE_STORAGE_BUCKET}/`
+  : '';
+let firebaseBucketCache = null;
+let firebaseImportAttempted = false;
+let paypackClientCache = null;
+let paypackImportAttempted = false;
+let mailerCache = null;
+
+const getFirebaseBucket = async () => {
+  if (!USE_FIREBASE_STORAGE) return null;
+  if (firebaseBucketCache) return firebaseBucketCache;
+  try {
+    const admin = (await import('firebase-admin')).default;
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: FIREBASE_PROJECT_ID,
+          clientEmail: FIREBASE_CLIENT_EMAIL,
+          privateKey: FIREBASE_PRIVATE_KEY
+        }),
+        storageBucket: FIREBASE_STORAGE_BUCKET
+      });
+    }
+    firebaseBucketCache = admin.storage().bucket();
+    return firebaseBucketCache;
+  } catch (err) {
+    if (!firebaseImportAttempted) {
+      console.error('Firebase Storage package/config missing. Falling back to local uploads.');
+      firebaseImportAttempted = true;
+    }
+    return null;
+  }
+};
+
+const getPaypackClient = async () => {
+  if (!PAYPACK_CLIENT_ID || !PAYPACK_CLIENT_SECRET) return null;
+  if (paypackClientCache) return paypackClientCache;
+  try {
+    const module = await import('paypack-js');
+    const Paypack = module.default || module;
+    paypackClientCache = new Paypack({
+      client_id: PAYPACK_CLIENT_ID,
+      client_secret: PAYPACK_CLIENT_SECRET
+    });
+    return paypackClientCache;
+  } catch (err) {
+    if (!paypackImportAttempted) {
+      console.error('Paypack SDK not available. Payment requests will fail.');
+      paypackImportAttempted = true;
+    }
+    return null;
+  }
+};
+
+const getMailer = () => {
+  if (mailerCache) return mailerCache;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
+    return null;
+  }
+  mailerCache = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    }
+  });
+  return mailerCache;
+};
 
 const resolveUploadFilePath = (urlValue) => {
   if (typeof urlValue !== 'string' || !urlValue.startsWith('/uploads/')) {
@@ -33,7 +141,37 @@ const resolveUploadFilePath = (urlValue) => {
   return path.join(UPLOADS_DIR, normalized);
 };
 
+const resolveFirebaseObjectName = (urlValue) => {
+  if (!USE_FIREBASE_STORAGE || typeof urlValue !== 'string') {
+    return null;
+  }
+  if (FIREBASE_STORAGE_URL_PREFIX && urlValue.startsWith(FIREBASE_STORAGE_URL_PREFIX)) {
+    const tail = urlValue.slice(FIREBASE_STORAGE_URL_PREFIX.length);
+    const objectPart = tail.split('?')[0];
+    return decodeURIComponent(objectPart);
+  }
+  if (FIREBASE_GCS_URL_PREFIX && urlValue.startsWith(FIREBASE_GCS_URL_PREFIX)) {
+    const tail = urlValue.slice(FIREBASE_GCS_URL_PREFIX.length);
+    const objectPart = tail.split('?')[0];
+    return decodeURIComponent(objectPart);
+  }
+  return null;
+};
+
 const deleteUploadIfExists = async (urlValue) => {
+  const firebaseObjectName = resolveFirebaseObjectName(urlValue);
+  if (firebaseObjectName) {
+    const bucket = await getFirebaseBucket();
+    if (bucket) {
+      try {
+        await bucket.file(firebaseObjectName).delete({ ignoreNotFound: true });
+      } catch (err) {
+        console.error('Failed to delete Firebase object:', err.message);
+      }
+      return;
+    }
+  }
+
   const filePath = resolveUploadFilePath(urlValue);
   if (!filePath) return;
   try {
@@ -46,25 +184,9 @@ const deleteUploadIfExists = async (urlValue) => {
   }
 };
 
-const createUploader = (subDir) => {
-  const storage = multer.diskStorage({
-    destination: async (req, file, cb) => {
-      try {
-        const targetDir = path.join(UPLOADS_DIR, subDir);
-        await fs.mkdir(targetDir, { recursive: true });
-        cb(null, targetDir);
-      } catch (err) {
-        cb(err, '');
-      }
-    },
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').toLowerCase();
-      const safeExt = ext || '.jpg';
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
-    }
-  });
-  return multer({
-    storage,
+const createUploader = () =>
+  multer({
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
       if (file.mimetype.startsWith('image/')) {
@@ -74,16 +196,44 @@ const createUploader = (subDir) => {
       }
     }
   });
+
+const saveUploadedFile = async (subDir, file) => {
+  const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+  const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const key = `${subDir}/${filename}`;
+
+  const bucket = await getFirebaseBucket();
+  if (bucket) {
+    const token = crypto.randomUUID();
+    const objectRef = bucket.file(key);
+    await objectRef.save(file.buffer, {
+      metadata: {
+        contentType: file.mimetype || 'application/octet-stream',
+        metadata: { firebaseStorageDownloadTokens: token }
+      }
+    });
+    const encodedKey = encodeURIComponent(key);
+    const url = `${FIREBASE_STORAGE_URL_PREFIX}${encodedKey}?alt=media&token=${token}`;
+    return { url, key };
+  }
+
+  const targetDir = path.join(UPLOADS_DIR, subDir);
+  await fs.mkdir(targetDir, { recursive: true });
+  const targetPath = path.join(targetDir, filename);
+  await fs.writeFile(targetPath, file.buffer);
+  return { url: buildUploadUrl(key), key };
 };
 
-const avatarUpload = createUploader('avatars');
-const galleryUpload = createUploader('gallery');
+const avatarUpload = createUploader();
+const galleryUpload = createUploader();
 
 const emptyData = () => ({
   users: [],
   customers: [],
   products: [],
   orders: [],
+  pendingPayments: [],
+  passwordResets: [],
   announcements: [],
   messages: [],
   gallery: []
@@ -96,6 +246,8 @@ const normalizeData = (data) => ({
   customers: Array.isArray(data?.customers) ? data.customers : [],
   products: Array.isArray(data?.products) ? data.products : [],
   orders: Array.isArray(data?.orders) ? data.orders : [],
+  pendingPayments: Array.isArray(data?.pendingPayments) ? data.pendingPayments : [],
+  passwordResets: Array.isArray(data?.passwordResets) ? data.passwordResets : [],
   announcements: Array.isArray(data?.announcements) ? data.announcements : [],
   messages: Array.isArray(data?.messages) ? data.messages : [],
   gallery: Array.isArray(data?.gallery) ? data.gallery : []
@@ -123,6 +275,101 @@ const nextId = (prefix, items) => {
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
 };
 
+const buildOrderItems = (itemsInput, products) => {
+  const items = Array.isArray(itemsInput) ? itemsInput : [];
+  const resolved = [];
+  items.forEach((item) => {
+    const productId = item?.product?.id || item?.productId || item?.id;
+    const quantity = Number(item?.quantity || 0);
+    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+      return;
+    }
+    const product = products.find((entry) => entry.id === String(productId));
+    if (!product) {
+      return;
+    }
+    resolved.push({ product, quantity });
+  });
+  if (resolved.length === 0) {
+    throw new Error('Order items required');
+  }
+  return resolved;
+};
+
+const createOrderRecord = (data, user, payload, overrides = {}) => {
+  const items = buildOrderItems(payload.items, data.products);
+  const deliveryZone =
+    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
+      ? payload.deliveryZone
+      : 'local';
+  const computedDeliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
+  const deliveryFee =
+    typeof overrides.deliveryFee === 'number'
+      ? overrides.deliveryFee
+      : typeof payload.deliveryFee === 'number'
+        ? payload.deliveryFee
+        : computedDeliveryFee;
+  const subtotal = items.reduce(
+    (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
+    0
+  );
+  const totalAmount =
+    typeof overrides.totalAmount === 'number'
+      ? overrides.totalAmount
+      : typeof payload.totalAmount === 'number'
+        ? payload.totalAmount
+        : subtotal;
+
+  const order = {
+    id: nextId('ORD', data.orders),
+    userId: user.id,
+    customerId: user.customerId,
+    customerName: payload.customerName || user.name,
+    customerPhone: payload.customerPhone || user.phone || '',
+    customerEmail: payload.customerEmail || user.email,
+    items,
+    totalAmount,
+    deliveryZone,
+    deliveryFee,
+    deliveryAddress: payload.deliveryAddress || '',
+    deliveryDate: payload.deliveryDate || '',
+    deliveryTimeWindow: payload.deliveryTimeWindow || '',
+    status: overrides.status || payload.status || 'pending',
+    notes: overrides.notes ?? payload.notes ?? '',
+    createdAt: new Date().toISOString()
+  };
+
+  if (overrides.paypackRef) {
+    order.paypackRef = overrides.paypackRef;
+  }
+  if (overrides.paymentStatus) {
+    order.paymentStatus = overrides.paymentStatus;
+  }
+
+  data.orders.unshift(order);
+
+  const customer = data.customers.find((entry) => entry.id === user.customerId);
+  if (customer) {
+    customer.totalOrders += 1;
+    customer.totalSpent += order.totalAmount + order.deliveryFee;
+    if (order.deliveryAddress && !customer.addresses.includes(order.deliveryAddress)) {
+      customer.addresses.push(order.deliveryAddress);
+    }
+    if (order.customerPhone) customer.phone = order.customerPhone;
+  }
+
+  items.forEach((item) => {
+    const productId = item.product?.id || item.productId || item.id;
+    const qty = Number(item.quantity || 0);
+    const product = data.products.find((entry) => entry.id === productId);
+    if (product && qty > 0) {
+      product.stock = Math.max(0, Number(product.stock || 0) - qty);
+    }
+  });
+
+  return order;
+};
+
 const authMiddleware = async (req, res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -140,6 +387,72 @@ const authMiddleware = async (req, res, next) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
+});
+
+app.head('/api/paypack/webhook', (req, res) => {
+  res.status(200).end();
+});
+
+app.post('/api/paypack/webhook', async (req, res) => {
+  const signature = req.get('X-Paypack-Signature') || '';
+  if (!PAYPACK_WEBHOOK_SECRET) {
+    return res.status(500).json({ error: 'Webhook secret not configured' });
+  }
+  if (!signature) {
+    return res.status(400).json({ error: 'Missing signature header' });
+  }
+  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+  const expected = crypto
+    .createHmac('sha256', PAYPACK_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('base64');
+  const signatureValid =
+    signature.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  if (!signatureValid) {
+    return res.status(400).json({ error: 'Invalid signature' });
+  }
+
+  const payload = req.body || {};
+  const data = payload.data || {};
+  const ref = data.ref;
+  const status = data.status;
+  if (!ref) {
+    return res.status(200).json({ ok: true });
+  }
+
+  const store = await loadData();
+  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
+  if (!pending) {
+    return res.status(200).json({ ok: true });
+  }
+
+  pending.status = status || pending.status || 'pending';
+  pending.updatedAt = new Date().toISOString();
+
+  if (status === 'successful' && !pending.orderId) {
+    const user = store.users.find((entry) => entry.id === pending.userId);
+    if (user) {
+      const orderPayload = pending.orderPayload || {};
+      const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Provider: ${data.provider || ''} | Ref: ${ref}`.trim();
+      try {
+        const order = createOrderRecord(store, user, orderPayload, {
+          status: 'confirmed',
+          paypackRef: ref,
+          paymentStatus: status,
+          totalAmount: pending.subtotal,
+          deliveryFee: pending.deliveryFee,
+          notes
+        });
+        pending.orderId = order.id;
+      } catch (err) {
+        pending.failureReason = err?.message || 'Failed to finalize order';
+      }
+    }
+  }
+
+  await saveData(store);
+  return res.status(200).json({ ok: true });
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -200,6 +513,279 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
+app.post('/api/paypack/cashin', authMiddleware, async (req, res) => {
+  const paypack = await getPaypackClient();
+  if (!paypack) {
+    return res.status(500).json({ error: 'Paypack configuration missing' });
+  }
+
+  const payload = req.body?.order || req.body || {};
+  const phone = payload.customerPhone || payload.phone;
+  if (!phone) {
+    return res.status(400).json({ error: 'Customer phone is required' });
+  }
+
+  const store = await loadData();
+  const user = store.users.find((entry) => entry.id === req.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  let items;
+  try {
+    items = buildOrderItems(payload.items, store.products);
+  } catch (err) {
+    return res.status(400).json({ error: 'Order items required' });
+  }
+
+  const deliveryZone =
+    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
+      ? payload.deliveryZone
+      : 'local';
+  const deliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
+  const subtotal = items.reduce(
+    (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
+    0
+  );
+  const amount = subtotal + deliveryFee;
+
+  try {
+    const cashinRes = await paypack.cashin({
+      number: String(phone),
+      amount,
+      environment: PAYPACK_WEBHOOK_MODE
+    });
+    const tx = cashinRes?.data || cashinRes;
+    const ref = tx?.ref;
+    if (!ref) {
+      throw new Error('Missing transaction reference');
+    }
+
+    const pending = {
+      id: nextId('PAY', store.pendingPayments),
+      ref,
+      status: tx?.status || 'pending',
+      amount,
+      subtotal,
+      deliveryFee,
+      userId: user.id,
+      customerId: user.customerId,
+      orderPayload: {
+        items: payload.items,
+        customerName: payload.customerName || user.name,
+        customerPhone: payload.customerPhone || user.phone || '',
+        customerEmail: payload.customerEmail || user.email,
+        deliveryAddress: payload.deliveryAddress || '',
+        deliveryDate: payload.deliveryDate || '',
+        deliveryTimeWindow: payload.deliveryTimeWindow || '',
+        deliveryZone,
+        notes: payload.notes || ''
+      },
+      createdAt: new Date().toISOString()
+    };
+
+    store.pendingPayments.unshift(pending);
+    await saveData(store);
+
+    return res.json({
+      ref,
+      status: pending.status,
+      amount
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Failed to initiate payment' });
+  }
+});
+
+app.post('/api/paypack/retry/:ref', authMiddleware, async (req, res) => {
+  const paypack = await getPaypackClient();
+  if (!paypack) {
+    return res.status(500).json({ error: 'Paypack configuration missing' });
+  }
+  const { ref } = req.params;
+  if (!ref) {
+    return res.status(400).json({ error: 'Missing transaction reference' });
+  }
+
+  const store = await loadData();
+  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
+  if (!pending || pending.userId !== req.userId) {
+    return res.status(404).json({ error: 'Pending payment not found' });
+  }
+  if (pending.status === 'successful') {
+    return res.status(400).json({ error: 'Payment already successful' });
+  }
+
+  const orderPayload = pending.orderPayload || {};
+  const phone = orderPayload.customerPhone;
+  if (!phone) {
+    return res.status(400).json({ error: 'Customer phone is required' });
+  }
+
+  try {
+    const cashinRes = await paypack.cashin({
+      number: String(phone),
+      amount: pending.amount,
+      environment: PAYPACK_WEBHOOK_MODE
+    });
+    const tx = cashinRes?.data || cashinRes;
+    const newRef = tx?.ref;
+    if (!newRef) {
+      throw new Error('Missing transaction reference');
+    }
+
+    pending.status = 'retried';
+    pending.updatedAt = new Date().toISOString();
+    pending.retriedTo = newRef;
+
+    const retryEntry = {
+      ...pending,
+      id: nextId('PAY', store.pendingPayments),
+      ref: newRef,
+      status: tx?.status || 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: undefined,
+      retriedFrom: ref,
+      retriedTo: undefined,
+      orderId: undefined
+    };
+
+    store.pendingPayments.unshift(retryEntry);
+    await saveData(store);
+    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
+  }
+});
+
+app.get('/api/paypack/transactions/:ref', authMiddleware, async (req, res) => {
+  const paypack = await getPaypackClient();
+  if (!paypack) {
+    return res.status(500).json({ error: 'Paypack configuration missing' });
+  }
+  const { ref } = req.params;
+  if (!ref) {
+    return res.status(400).json({ error: 'Missing transaction reference' });
+  }
+
+  try {
+    const txRes = await paypack.transaction(ref);
+    const tx = txRes?.data || txRes;
+
+    const store = await loadData();
+    const pending = store.pendingPayments.find((entry) => entry.ref === ref);
+    let order = null;
+
+    if (pending && tx?.status) {
+      pending.status = tx.status;
+      pending.updatedAt = new Date().toISOString();
+
+      if (tx.status === 'successful' && !pending.orderId) {
+        const user = store.users.find((entry) => entry.id === pending.userId);
+        if (user) {
+          const orderPayload = pending.orderPayload || {};
+          const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Ref: ${ref}`.trim();
+          try {
+            order = createOrderRecord(store, user, orderPayload, {
+              status: 'confirmed',
+              paypackRef: ref,
+              paymentStatus: tx.status,
+              totalAmount: pending.subtotal,
+              deliveryFee: pending.deliveryFee,
+              notes
+            });
+            pending.orderId = order.id;
+          } catch (err) {
+            pending.failureReason = err?.message || 'Failed to finalize order';
+          }
+        }
+      }
+
+      if (tx.status === 'failed') {
+        pending.failureReason = tx?.message || pending.failureReason || '';
+      }
+
+      await saveData(store);
+    }
+
+    return res.json({ transaction: tx, order });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Failed to fetch transaction' });
+  }
+});
+
+app.get('/api/payments/my', authMiddleware, async (req, res) => {
+  const data = await loadData();
+  const payments = data.pendingPayments.filter((entry) => entry.userId === req.userId);
+  res.json({ payments });
+});
+
+app.get('/api/admin/payments', async (req, res) => {
+  const data = await loadData();
+  res.json({ payments: data.pendingPayments });
+});
+
+app.post('/api/admin/payments/retry/:ref', async (req, res) => {
+  const paypack = await getPaypackClient();
+  if (!paypack) {
+    return res.status(500).json({ error: 'Paypack configuration missing' });
+  }
+  const { ref } = req.params;
+  if (!ref) {
+    return res.status(400).json({ error: 'Missing transaction reference' });
+  }
+
+  const store = await loadData();
+  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
+  if (!pending) {
+    return res.status(404).json({ error: 'Pending payment not found' });
+  }
+  if (pending.status === 'successful') {
+    return res.status(400).json({ error: 'Payment already successful' });
+  }
+
+  const orderPayload = pending.orderPayload || {};
+  const phone = orderPayload.customerPhone;
+  if (!phone) {
+    return res.status(400).json({ error: 'Customer phone is required' });
+  }
+
+  try {
+    const cashinRes = await paypack.cashin({
+      number: String(phone),
+      amount: pending.amount,
+      environment: PAYPACK_WEBHOOK_MODE
+    });
+    const tx = cashinRes?.data || cashinRes;
+    const newRef = tx?.ref;
+    if (!newRef) {
+      throw new Error('Missing transaction reference');
+    }
+
+    pending.status = 'retried';
+    pending.updatedAt = new Date().toISOString();
+    pending.retriedTo = newRef;
+
+    const retryEntry = {
+      ...pending,
+      id: nextId('PAY', store.pendingPayments),
+      ref: newRef,
+      status: tx?.status || 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: undefined,
+      retriedFrom: ref,
+      retriedTo: undefined,
+      orderId: undefined
+    };
+
+    store.pendingPayments.unshift(retryEntry);
+    await saveData(store);
+    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -233,6 +819,86 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const data = await loadData();
+  const user = data.users.find(
+    (entry) => entry.email.toLowerCase() === String(email).toLowerCase()
+  );
+
+  if (!user) {
+    return res.status(404).json({ error: 'No account found for that email' });
+  }
+
+  const token = String(crypto.randomInt(100000, 1000000));
+  const expiresAt = Date.now() + 60 * 60 * 1000;
+  const reset = {
+    id: nextId('RST', data.passwordResets),
+    userId: user.id,
+    token,
+    createdAt: new Date().toISOString(),
+    expiresAt,
+    used: false
+  };
+  data.passwordResets.unshift(reset);
+  await saveData(data);
+
+  const baseUrl = APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+  const mailer = getMailer();
+  if (!mailer) {
+    if (NODE_ENV !== 'production') {
+      return res.json({ ok: true, resetToken: token });
+    }
+    return res.status(500).json({ error: 'Email service not configured' });
+  }
+
+  try {
+    await mailer.sendMail({
+      from: SMTP_FROM,
+      to: user.email,
+      subject: 'Your Goodrich Farm reset code',
+      text: `Your reset code is ${token}. Or use this link: ${resetUrl}`,
+      html: `<p>Your reset code is <strong>${token}</strong>.</p><p>You can also reset using this link:</p><p><a href="${resetUrl}">${resetUrl}</a></p>`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to send reset email' });
+  }
+
+  return res.json({ ok: true });
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token and password are required' });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  const data = await loadData();
+  const reset = data.passwordResets.find((entry) => entry.token === token && !entry.used);
+  if (!reset || reset.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Reset token is invalid or expired' });
+  }
+
+  const user = data.users.find((entry) => entry.id === reset.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  user.passwordHash = await bcrypt.hash(String(password), 10);
+  reset.used = true;
+  reset.usedAt = new Date().toISOString();
+  await saveData(data);
+  return res.json({ ok: true });
+});
+
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   const data = await loadData();
   const user = data.users.find((entry) => entry.id === req.userId);
@@ -255,16 +921,24 @@ app.post('/api/uploads/avatar', authMiddleware, avatarUpload.single('file'), asy
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  const relative = path.relative(UPLOADS_DIR, req.file.path);
-  return res.json({ url: buildUploadUrl(relative) });
+  try {
+    const stored = await saveUploadedFile('avatars', req.file);
+    return res.json({ url: stored.url });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to store uploaded file' });
+  }
 });
 
 app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  const relative = path.relative(UPLOADS_DIR, req.file.path);
-  return res.json({ url: buildUploadUrl(relative) });
+  try {
+    const stored = await saveUploadedFile('gallery', req.file);
+    return res.json({ url: stored.url });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to store uploaded file' });
+  }
 });
 
 app.patch('/api/auth/me', authMiddleware, async (req, res) => {
@@ -546,50 +1220,12 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  if (items.length === 0) {
-    return res.status(400).json({ error: 'Order items required' });
+  let order;
+  try {
+    order = createOrderRecord(data, user, payload);
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Order items required' });
   }
-
-  const order = {
-    id: nextId('ORD', data.orders),
-    userId: user.id,
-    customerId: user.customerId,
-    customerName: payload.customerName || user.name,
-    customerPhone: payload.customerPhone || user.phone || '',
-    customerEmail: payload.customerEmail || user.email,
-    items,
-    totalAmount: Number(payload.totalAmount || 0),
-    deliveryZone: payload.deliveryZone || 'local',
-    deliveryFee: Number(payload.deliveryFee || 0),
-    deliveryAddress: payload.deliveryAddress || '',
-    deliveryDate: payload.deliveryDate || '',
-    deliveryTimeWindow: payload.deliveryTimeWindow || '',
-    status: payload.status || 'pending',
-    notes: payload.notes || '',
-    createdAt: new Date().toISOString()
-  };
-
-  data.orders.unshift(order);
-
-  const customer = data.customers.find((entry) => entry.id === user.customerId);
-  if (customer) {
-    customer.totalOrders += 1;
-    customer.totalSpent += order.totalAmount + order.deliveryFee;
-    if (order.deliveryAddress && !customer.addresses.includes(order.deliveryAddress)) {
-      customer.addresses.push(order.deliveryAddress);
-    }
-    if (order.customerPhone) customer.phone = order.customerPhone;
-  }
-
-  items.forEach((item) => {
-    const productId = item.product?.id || item.productId || item.id;
-    const qty = Number(item.quantity || 0);
-    const product = data.products.find((entry) => entry.id === productId);
-    if (product && qty > 0) {
-      product.stock = Math.max(0, Number(product.stock || 0) - qty);
-    }
-  });
 
   await saveData(data);
   res.json({ order });
@@ -663,6 +1299,16 @@ app.get('/api/admin/customers', async (req, res) => {
   const data = await loadData();
   res.json({ customers: data.customers });
 });
+
+if (NODE_ENV === 'production') {
+  app.use(express.static(DIST_PATH));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    return res.sendFile(path.join(DIST_PATH, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`API server listening on http://localhost:${PORT}`);

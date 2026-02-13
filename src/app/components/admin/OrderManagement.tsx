@@ -76,6 +76,11 @@ export function OrderManagement() {
                         {new Date(order.createdAt).toLocaleDateString()} at{' '}
                         {new Date(order.createdAt).toLocaleTimeString()}
                       </p>
+                      {order.paypackRef && (
+                        <p className="text-xs text-[#6B5344]">
+                          Paypack Ref: {order.paypackRef} {order.paymentStatus ? `(${order.paymentStatus})` : ''}
+                        </p>
+                      )}
                     </div>
                     <Badge className={statusColors[order.status]}>
                       {order.status}
@@ -172,11 +177,20 @@ export function OrderManagement() {
                               <h4 className="text-sm text-[#6B5344] mb-1">Email</h4>
                               <p className="text-[#3D2817]">{selectedOrder.customerEmail || 'N/A'}</p>
                             </div>
-                            <div>
-                              <h4 className="text-sm text-[#6B5344] mb-1">Delivery Zone</h4>
-                              <p className="text-[#3D2817] capitalize">{selectedOrder.deliveryZone}</p>
-                            </div>
+                          <div>
+                            <h4 className="text-sm text-[#6B5344] mb-1">Delivery Zone</h4>
+                            <p className="text-[#3D2817] capitalize">{selectedOrder.deliveryZone}</p>
                           </div>
+                          <div>
+                            <h4 className="text-sm text-[#6B5344] mb-1">Payment</h4>
+                            <p className="text-[#3D2817]">
+                              {selectedOrder.paypackRef ? selectedOrder.paypackRef : 'N/A'}
+                            </p>
+                            {selectedOrder.paymentStatus && (
+                              <p className="text-xs text-[#6B5344]">{selectedOrder.paymentStatus}</p>
+                            )}
+                          </div>
+                        </div>
                           
                           <div>
                             <h4 className="text-sm text-[#6B5344] mb-1">Delivery Address</h4>
