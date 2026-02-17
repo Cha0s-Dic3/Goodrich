@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MapPin, Mail, Package, Calendar, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 
 export function CheckoutPage() {
   const { cart, cartTotal, setCurrentPage, isUserLoggedIn, authUser, authToken } = useApp();
+  const { t } = useI18n();
   const [formData, setFormData] = useState({
     customerId: '',
     customerName: '',
@@ -24,7 +26,7 @@ export function CheckoutPage() {
 
   useEffect(() => {
     if (!isUserLoggedIn) {
-      toast.error('Please sign in to continue checkout');
+      toast.error(t('checkout.signInRequired'));
       sessionStorage.setItem('postLoginRedirect', 'checkout');
       setCurrentPage('login');
     }
@@ -69,7 +71,7 @@ export function CheckoutPage() {
     e.preventDefault();
 
     if (!formData.customerName || !formData.customerPhone || !formData.customerEmail || !formData.deliveryAddress || !formData.deliveryDate) {
-      toast.error('Please fill in all required fields');
+      toast.error(t('checkout.fillRequired'));
       return;
     }
 
@@ -82,7 +84,7 @@ export function CheckoutPage() {
 
     const persistCheckout = () => {
       sessionStorage.setItem('checkoutData', JSON.stringify(formData));
-      toast.success('Order details saved. Proceeding to payment...');
+      toast.success(t('checkout.savedProceeding'));
       setCurrentPage('payment');
     };
 
@@ -98,7 +100,7 @@ export function CheckoutPage() {
         .then(async (res) => {
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Failed to sync customer');
+            throw new Error(data.error || t('checkout.syncFailed'));
           }
         })
         .then(() => persistCheckout())
@@ -117,8 +119,8 @@ export function CheckoutPage() {
       <section className="py-12 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2">Checkout</h1>
-            <p className="text-lg text-[#FAF3E0]">Complete your order and arrange delivery</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2">{t('checkout.title')}</h1>
+            <p className="text-lg text-[#FAF3E0]">{t('checkout.subtitle')}</p>
           </div>
         </div>
       </section>
@@ -135,18 +137,18 @@ export function CheckoutPage() {
                   <div>
                     <h2 className="text-2xl font-bold text-[#3D2817] mb-6 flex items-center gap-2">
                       <Mail className="h-6 w-6 text-[#C41E3A]" />
-                      Customer Information
+                      {t('checkout.customerInfo')}
                     </h2>
                     <div className="space-y-4">
                       <div>
                         <label htmlFor="customerName" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                          Full Name *
+                          {t('checkout.fullName')} *
                         </label>
                         <Input
                           id="customerName"
                           name="customerName"
                           type="text"
-                          placeholder="Your full name"
+                          placeholder={t('checkout.fullNamePlaceholder')}
                           value={formData.customerName}
                           onChange={handleInputChange}
                           required
@@ -157,13 +159,13 @@ export function CheckoutPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label htmlFor="customerPhone" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            Phone Number *
+                            {t('checkout.phoneNumber')} *
                           </label>
                           <Input
                             id="customerPhone"
                             name="customerPhone"
                             type="tel"
-                            placeholder="Enter your phone number"
+                            placeholder={t('checkout.phonePlaceholder')}
                             value={formData.customerPhone}
                             onChange={handleInputChange}
                             required
@@ -173,13 +175,13 @@ export function CheckoutPage() {
 
                         <div>
                           <label htmlFor="customerEmail" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            Email Address *
+                            {t('checkout.emailAddress')} *
                           </label>
                           <Input
                             id="customerEmail"
                             name="customerEmail"
                             type="email"
-                            placeholder="your@email.com"
+                            placeholder={t('checkout.emailPlaceholder')}
                             value={formData.customerEmail}
                             onChange={handleInputChange}
                             required
@@ -194,17 +196,17 @@ export function CheckoutPage() {
                   <div className="pt-6 border-t border-[#D2B48C]">
                     <h2 className="text-2xl font-bold text-[#3D2817] mb-6 flex items-center gap-2">
                       <MapPin className="h-6 w-6 text-[#C41E3A]" />
-                      Delivery Information
+                      {t('checkout.deliveryInfo')}
                     </h2>
                     <div className="space-y-4">
                       <div>
                         <label htmlFor="deliveryAddress" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                          Delivery Address *
+                          {t('checkout.deliveryAddress')} *
                         </label>
                         <Textarea
                           id="deliveryAddress"
                           name="deliveryAddress"
-                          placeholder="Enter your complete delivery address"
+                          placeholder={t('checkout.deliveryAddressPlaceholder')}
                           value={formData.deliveryAddress}
                           onChange={handleInputChange}
                           required
@@ -216,23 +218,23 @@ export function CheckoutPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label htmlFor="deliveryZone" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            Delivery Zone *
+                            {t('checkout.deliveryZone')} *
                           </label>
                           <Select value={formData.deliveryZone} onValueChange={(value) => handleSelectChange('deliveryZone', value)}>
                             <SelectTrigger className="border-[#D2B48C]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="local">Local (10km) - 3,000 FRW</SelectItem>
-                              <SelectItem value="regional">Regional (51-60km) - 10,000 FRW</SelectItem>
-                              <SelectItem value="national">National - 15,000 FRW</SelectItem>
+                              <SelectItem value="local">{t('checkout.zone.local')}</SelectItem>
+                              <SelectItem value="regional">{t('checkout.zone.regional')}</SelectItem>
+                              <SelectItem value="national">{t('checkout.zone.national')}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
                         <div>
                           <label htmlFor="deliveryDate" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            Preferred Delivery Date *
+                            {t('checkout.preferredDate')} *
                           </label>
                           <Input
                             id="deliveryDate"
@@ -248,16 +250,16 @@ export function CheckoutPage() {
 
                       <div>
                         <label htmlFor="deliveryTimeWindow" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                          Preferred Time Window
+                          {t('checkout.preferredWindow')}
                         </label>
                         <Select value={formData.deliveryTimeWindow} onValueChange={(value) => handleSelectChange('deliveryTimeWindow', value)}>
                           <SelectTrigger className="border-[#D2B48C]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="9:00 AM - 12:00 PM">9:00 AM - 12:00 PM</SelectItem>
-                            <SelectItem value="12:00 PM - 3:00 PM">12:00 PM - 3:00 PM</SelectItem>
-                            <SelectItem value="3:00 PM - 6:00 PM">3:00 PM - 6:00 PM</SelectItem>
+                            <SelectItem value="9:00 AM - 12:00 PM">{t('checkout.window.morning')}</SelectItem>
+                            <SelectItem value="12:00 PM - 3:00 PM">{t('checkout.window.midday')}</SelectItem>
+                            <SelectItem value="3:00 PM - 6:00 PM">{t('checkout.window.afternoon')}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -266,11 +268,11 @@ export function CheckoutPage() {
 
                   {/* Additional Notes */}
                   <div className="pt-6 border-t border-[#D2B48C]">
-                    <h2 className="text-xl font-bold text-[#3D2817] mb-4">Additional Notes</h2>
+                    <h2 className="text-xl font-bold text-[#3D2817] mb-4">{t('checkout.additionalNotes')}</h2>
                     <Textarea
                       id="notes"
                       name="notes"
-                      placeholder="Any special instructions or notes for delivery..."
+                      placeholder={t('checkout.notesPlaceholder')}
                       value={formData.notes}
                       onChange={handleInputChange}
                       rows={3}
@@ -286,14 +288,14 @@ export function CheckoutPage() {
                       className="border-[#D2B48C] text-[#3D2817] hover:bg-[#F0EAD6]"
                       onClick={() => setCurrentPage('cart')}
                     >
-                      Back to Cart
+                      {t('checkout.backToCart')}
                     </Button>
                     <Button
                       type="submit"
                       className="flex-1 bg-[#C41E3A] hover:bg-[#FF6B6B] text-white font-semibold"
                       size="lg"
                     >
-                      Proceed to Payment
+                      {t('checkout.proceedPayment')}
                     </Button>
                   </div>
                 </form>
@@ -305,7 +307,7 @@ export function CheckoutPage() {
               <Card className="p-6 bg-white border-2 border-[#D2B48C] sticky top-4">
                 <h2 className="text-2xl font-bold text-[#3D2817] mb-6 flex items-center gap-2">
                   <Package className="h-6 w-6 text-[#C41E3A]" />
-                  Order Summary
+                  {t('checkout.orderSummary')}
                 </h2>
 
                 {/* Items */}
@@ -314,7 +316,7 @@ export function CheckoutPage() {
                     <div key={item.product.id} className="flex justify-between items-start">
                       <div>
                         <p className="font-semibold text-[#3D2817]">{item.product.name}</p>
-                        <p className="text-sm text-[#6B5344]">Qty: {item.quantity}</p>
+                        <p className="text-sm text-[#6B5344]">{t('checkout.qtyLabel')} {item.quantity}</p>
                       </div>
                       <p className="font-semibold text-[#3D2817]">
                         {(item.product.price * item.quantity).toLocaleString()} FRW
@@ -326,15 +328,15 @@ export function CheckoutPage() {
                 {/* Pricing */}
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between text-[#6B5344]">
-                    <span>Subtotal:</span>
+                    <span>{t('checkout.subtotal')}</span>
                     <span className="font-semibold">{cartTotal.toLocaleString()} FRW</span>
                   </div>
                   <div className="flex justify-between text-[#6B5344]">
-                    <span>Delivery Fee:</span>
+                    <span>{t('checkout.deliveryFee')}</span>
                     <span className="font-semibold">{deliveryFee.toLocaleString()} FRW</span>
                   </div>
                   <div className="pt-2 border-t border-[#D2B48C] flex justify-between">
-                    <span className="font-bold text-[#3D2817]">Total:</span>
+                    <span className="font-bold text-[#3D2817]">{t('checkout.total')}</span>
                     <span className="text-2xl font-bold text-[#C41E3A]">
                       {totalAmount.toLocaleString()} FRW
                     </span>
@@ -345,11 +347,11 @@ export function CheckoutPage() {
                 <div className="bg-[#F0EAD6] rounded-lg p-4 text-sm text-[#6B5344] space-y-2">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-[#C41E3A]" />
-                    <span>Deliver on your chosen date</span>
+                    <span>{t('checkout.deliveryDateHint')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-[#C41E3A]" />
-                    <span>Within your preferred time window</span>
+                    <span>{t('checkout.deliveryWindowHint')}</span>
                   </div>
                 </div>
               </Card>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ShoppingCart, Plus, Minus, Package } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 
 export function ShopPage() {
   const { products, addToCart, cart } = useApp();
+  const { t } = useI18n();
   const [selectedSize, setSelectedSize] = useState<string>('all');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   
@@ -25,20 +27,20 @@ export function ShopPage() {
   const handleAddToCart = (product: typeof products[0]) => {
     const quantity = quantities[product.id] || 1;
     if (quantity > product.stock) {
-      toast.error('Not enough stock available');
+      toast.error(t('shop.notEnoughStock'));
       return;
     }
     addToCart(product, quantity);
-    toast.success(`Added ${quantity} ${product.name} to cart`);
+    toast.success(t('shop.addedToCart', { quantity, name: product.name }));
     setQuantities(prev => ({ ...prev, [product.id]: 1 }));
   };
   
   const sizeFilters = [
-    { value: 'all', label: 'All Sizes' },
-    { value: 'small', label: 'Small' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'large', label: 'Large' },
-    { value: 'extra-large', label: 'Extra Large' }
+    { value: 'all', label: t('shop.filters.all') },
+    { value: 'small', label: t('shop.filters.small') },
+    { value: 'medium', label: t('shop.filters.medium') },
+    { value: 'large', label: t('shop.filters.large') },
+    { value: 'extra-large', label: t('shop.filters.extraLarge') }
   ];
   
   return (
@@ -47,9 +49,9 @@ export function ShopPage() {
       <section className="py-16 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl mb-6 text-[#FFFDD0]">Shop Fresh Eggs</h1>
+            <h1 className="text-5xl mb-6 text-[#FFFDD0]">{t('shop.heroTitle')}</h1>
             <p className="text-xl text-[#FAF3E0]">
-              All eggs are collected daily and delivered fresh. Choose your preferred size and quantity.
+              {t('shop.heroDesc')}
             </p>
           </div>
         </div>
@@ -83,7 +85,7 @@ export function ShopPage() {
           {filteredProducts.length === 0 ? (
             <div className="text-center py-16">
               <Package className="h-16 w-16 text-[#D2B48C] mx-auto mb-4" />
-              <p className="text-xl text-[#6B5344]">No products found</p>
+              <p className="text-xl text-[#6B5344]">{t('shop.noProducts')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -102,12 +104,12 @@ export function ShopPage() {
                       />
                       {isInCart && (
                         <Badge className="absolute top-3 right-3 bg-[#228B22] text-white">
-                          In Cart
+                          {t('shop.inCart')}
                         </Badge>
                       )}
                       {product.stock < 10 && (
                         <Badge className="absolute top-3 left-3 bg-[#FF8C00] text-white">
-                          Low Stock
+                          {t('shop.lowStock')}
                         </Badge>
                       )}
                     </div>
@@ -131,11 +133,11 @@ export function ShopPage() {
                             {product.price.toLocaleString()} FRW
                           </div>
                           <div className="text-xs text-[#6B5344]">
-                            {product.quantity} eggs per tray
+                            {product.quantity} {t('shop.eggsPerTray')}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm text-[#6B5344]">Stock</div>
+                          <div className="text-sm text-[#6B5344]">{t('shop.stock')}</div>
                           <div className="text-lg text-[#3D2817]">{product.stock}</div>
                         </div>
                       </div>
@@ -153,7 +155,7 @@ export function ShopPage() {
                         </Button>
                         <div className="flex-1 text-center">
                           <div className="text-2xl text-[#3D2817]">{quantity}</div>
-                          <div className="text-xs text-[#6B5344]">Trays</div>
+                          <div className="text-xs text-[#6B5344]">{t('shop.trays')}</div>
                         </div>
                         <Button
                           size="sm"
@@ -173,7 +175,7 @@ export function ShopPage() {
                         className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
                       >
                         <ShoppingCart className="mr-2 h-4 w-4" />
-                        {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                        {product.stock === 0 ? t('shop.outOfStock') : t('shop.addToCart')}
                       </Button>
                     </div>
                   </Card>
@@ -188,27 +190,27 @@ export function ShopPage() {
       <section className="py-16 bg-[#F0EAD6]">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl mb-8 text-center text-[#3D2817]">Why Choose Our Eggs?</h2>
+            <h2 className="text-3xl mb-8 text-center text-[#3D2817]">{t('shop.whyTitle')}</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="p-6 bg-white border-2 border-[#228B22]">
-                <h3 className="text-lg mb-2 text-[#3D2817]">Free-Range Quality</h3>
+                <h3 className="text-lg mb-2 text-[#3D2817]">{t('shop.why.freeRangeTitle')}</h3>
                 <p className="text-sm text-[#6B5344]">
-                  Our chickens roam freely, producing eggs with superior taste and nutrition.
+                  {t('shop.why.freeRangeDesc')}
                 </p>
               </Card>
               
               <Card className="p-6 bg-white border-2 border-[#FFD700]">
-                <h3 className="text-lg mb-2 text-[#3D2817]">Daily Collection</h3>
+                <h3 className="text-lg mb-2 text-[#3D2817]">{t('shop.why.dailyTitle')}</h3>
                 <p className="text-sm text-[#6B5344]">
-                  Eggs are collected every day to ensure maximum freshness when delivered to you.
+                  {t('shop.why.dailyDesc')}
                 </p>
               </Card>
               
               <Card className="p-6 bg-white border-2 border-[#C41E3A]">
-                <h3 className="text-lg mb-2 text-[#3D2817]">Quality Inspected</h3>
+                <h3 className="text-lg mb-2 text-[#3D2817]">{t('shop.why.qualityTitle')}</h3>
                 <p className="text-sm text-[#6B5344]">
-                  Every egg is carefully inspected before packaging to ensure top quality.
+                  {t('shop.why.qualityDesc')}
                 </p>
               </Card>
             </div>

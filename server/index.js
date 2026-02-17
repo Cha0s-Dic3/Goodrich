@@ -34,12 +34,17 @@ const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
+const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
+const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
 
 const DELIVERY_FEES = {
   local: 3000,
   regional: 10000,
   national: 15000
 };
+const MAX_ADMIN_LIMIT = 1000;
+const SUPPORTED_LANGUAGES = ['en', 'rw', 'sw', 'fr'];
+const DEFAULT_CONTENT_LANGUAGE = 'en';
 
 const app = express();
 app.use(cors({ origin: true, credentials: false }));
@@ -275,6 +280,92 @@ const nextId = (prefix, items) => {
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
 };
 
+const paginateList = (items, req) => {
+  const limitRaw = req.query.limit ? Number(req.query.limit) : null;
+  const offsetRaw = req.query.offset ? Number(req.query.offset) : 0;
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+  const limit =
+    Number.isFinite(limitRaw) && limitRaw > 0
+      ? Math.min(Math.floor(limitRaw), MAX_ADMIN_LIMIT)
+      : null;
+  return limit ? items.slice(offset, offset + limit) : items.slice(offset, offset + MAX_ADMIN_LIMIT);
+};
+
+const sanitizeLanguage = (value) => {
+  const candidate = String(value || '').toLowerCase();
+  return SUPPORTED_LANGUAGES.includes(candidate) ? candidate : DEFAULT_CONTENT_LANGUAGE;
+};
+
+const isLocalizedTextMap = (value) =>
+  value && typeof value === 'object' && !Array.isArray(value);
+
+const toLocalizedTextMap = (value, language = DEFAULT_CONTENT_LANGUAGE) => {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text ? { [language]: text } : {};
+  }
+  if (isLocalizedTextMap(value)) {
+    const out = {};
+    SUPPORTED_LANGUAGES.forEach((lang) => {
+      if (typeof value[lang] === 'string' && value[lang].trim()) {
+        out[lang] = value[lang].trim();
+      }
+    });
+    return out;
+  }
+  return {};
+};
+
+const mergeLocalizedText = (currentValue, incomingValue, language = DEFAULT_CONTENT_LANGUAGE) => {
+  const current = toLocalizedTextMap(currentValue, DEFAULT_CONTENT_LANGUAGE);
+  if (incomingValue === undefined || incomingValue === null) {
+    return current;
+  }
+  if (typeof incomingValue === 'string') {
+    const text = incomingValue.trim();
+    if (text) {
+      current[language] = text;
+    }
+    return current;
+  }
+  if (isLocalizedTextMap(incomingValue)) {
+    const incoming = toLocalizedTextMap(incomingValue, language);
+    return { ...current, ...incoming };
+  }
+  return current;
+};
+
+const resolveLocalizedText = (value, language, fallback = DEFAULT_CONTENT_LANGUAGE) => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  const map = toLocalizedTextMap(value, fallback);
+  return (
+    map[language] ||
+    map[fallback] ||
+    Object.values(map)[0] ||
+    ''
+  );
+};
+
+const localizeProduct = (product, language) => ({
+  ...product,
+  name: resolveLocalizedText(product?.name, language),
+  description: resolveLocalizedText(product?.description, language)
+});
+
+const localizeAnnouncement = (announcement, language) => ({
+  ...announcement,
+  title: resolveLocalizedText(announcement?.title, language),
+  content: resolveLocalizedText(announcement?.content, language)
+});
+
+const localizeGalleryItem = (item, language) => ({
+  ...item,
+  title: resolveLocalizedText(item?.title, language),
+  description: resolveLocalizedText(item?.description, language)
+});
+
 const buildOrderItems = (itemsInput, products) => {
   const items = Array.isArray(itemsInput) ? itemsInput : [];
   const resolved = [];
@@ -288,7 +379,12 @@ const buildOrderItems = (itemsInput, products) => {
     if (!product) {
       return;
     }
-    resolved.push({ product, quantity });
+    const productSnapshot = {
+      ...product,
+      name: resolveLocalizedText(product?.name, DEFAULT_CONTENT_LANGUAGE),
+      description: resolveLocalizedText(product?.description, DEFAULT_CONTENT_LANGUAGE)
+    };
+    resolved.push({ product: productSnapshot, quantity });
   });
   if (resolved.length === 0) {
     throw new Error('Order items required');
@@ -720,9 +816,67 @@ app.get('/api/payments/my', authMiddleware, async (req, res) => {
   res.json({ payments });
 });
 
+app.post('/api/payments/manual', authMiddleware, async (req, res) => {
+  const payload = req.body?.order || req.body || {};
+  const data = await loadData();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  let items;
+  try {
+    items = buildOrderItems(payload.items, data.products);
+  } catch (err) {
+    return res.status(400).json({ error: 'Order items required' });
+  }
+
+  const deliveryZone =
+    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
+      ? payload.deliveryZone
+      : 'local';
+  const deliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
+  const subtotal = items.reduce(
+    (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
+    0
+  );
+  const amount = subtotal + deliveryFee;
+
+  const payment = {
+    id: nextId('PAY', data.pendingPayments),
+    ref: `MAN-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+    status: 'pending-approval',
+    method: 'manual-momo',
+    receiverName: MANUAL_MOMO_RECEIVER_NAME,
+    receiverPhone: MANUAL_MOMO_RECEIVER_PHONE,
+    amount,
+    subtotal,
+    deliveryFee,
+    userId: user.id,
+    customerId: user.customerId,
+    orderPayload: {
+      items: payload.items,
+      customerName: payload.customerName || user.name,
+      customerPhone: payload.customerPhone || user.phone || '',
+      customerEmail: payload.customerEmail || user.email,
+      deliveryAddress: payload.deliveryAddress || '',
+      deliveryDate: payload.deliveryDate || '',
+      deliveryTimeWindow: payload.deliveryTimeWindow || '',
+      deliveryZone,
+      notes: payload.notes || ''
+    },
+    createdAt: new Date().toISOString(),
+    expiresAt: Date.now() + 30 * 60 * 1000
+  };
+
+  data.pendingPayments.unshift(payment);
+  await saveData(data);
+  return res.json({ payment });
+});
+
 app.get('/api/admin/payments', async (req, res) => {
   const data = await loadData();
-  res.json({ payments: data.pendingPayments });
+  res.json({ payments: paginateList(data.pendingPayments, req) });
 });
 
 app.post('/api/admin/payments/retry/:ref', async (req, res) => {
@@ -786,6 +940,77 @@ app.post('/api/admin/payments/retry/:ref', async (req, res) => {
   }
 });
 
+app.post('/api/admin/payments/approve/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Missing payment id' });
+  }
+
+  const store = await loadData();
+  const payment = store.pendingPayments.find((entry) => entry.id === id);
+  if (!payment) {
+    return res.status(404).json({ error: 'Payment not found' });
+  }
+  if (payment.status === 'approved' || payment.orderId) {
+    return res.json({ payment, orderId: payment.orderId });
+  }
+  if (payment.status === 'cancelled') {
+    return res.status(400).json({ error: 'Payment already cancelled' });
+  }
+
+  const user = store.users.find((entry) => entry.id === payment.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  let order;
+  try {
+    order = createOrderRecord(store, user, payment.orderPayload || {}, {
+      status: 'confirmed',
+      paypackRef: payment.ref,
+      paymentStatus: 'approved',
+      totalAmount: payment.subtotal,
+      deliveryFee: payment.deliveryFee,
+      notes: `${payment.orderPayload?.notes || ''}\nManual payment approved by admin.`.trim()
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Failed to create order' });
+  }
+
+  payment.status = 'approved';
+  payment.approvedAt = new Date().toISOString();
+  payment.orderId = order.id;
+  await saveData(store);
+  return res.json({ payment, order });
+});
+
+app.post('/api/admin/payments/cancel/:id', async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body || {};
+  if (!id) {
+    return res.status(400).json({ error: 'Missing payment id' });
+  }
+  if (!reason || !String(reason).trim()) {
+    return res.status(400).json({ error: 'Cancel reason is required' });
+  }
+
+  const store = await loadData();
+  const payment = store.pendingPayments.find((entry) => entry.id === id);
+  if (!payment) {
+    return res.status(404).json({ error: 'Payment not found' });
+  }
+  if (payment.status === 'approved') {
+    return res.status(400).json({ error: 'Payment already approved' });
+  }
+
+  payment.status = 'cancelled';
+  payment.cancelledAt = new Date().toISOString();
+  const trimmedReason = String(reason).trim().slice(0, 300);
+  payment.failureReason = trimmedReason;
+  await saveData(store);
+  return res.json({ payment });
+});
+
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -839,50 +1064,37 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   const reset = {
     id: nextId('RST', data.passwordResets),
     userId: user.id,
+    email: user.email,
+    name: user.name,
     token,
+    hasAccount: true,
     createdAt: new Date().toISOString(),
     expiresAt,
     used: false
   };
   data.passwordResets.unshift(reset);
   await saveData(data);
-
-  const baseUrl = APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
-  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
-  const mailer = getMailer();
-  if (!mailer) {
-    if (NODE_ENV !== 'production') {
-      return res.json({ ok: true, resetToken: token });
-    }
-    return res.status(500).json({ error: 'Email service not configured' });
-  }
-
-  try {
-    await mailer.sendMail({
-      from: SMTP_FROM,
-      to: user.email,
-      subject: 'Your Goodrich Farm reset code',
-      text: `Your reset code is ${token}. Or use this link: ${resetUrl}`,
-      html: `<p>Your reset code is <strong>${token}</strong>.</p><p>You can also reset using this link:</p><p><a href="${resetUrl}">${resetUrl}</a></p>`
-    });
-  } catch (err) {
-    return res.status(500).json({ error: 'Failed to send reset email' });
-  }
-
   return res.json({ ok: true });
 });
 
 app.post('/api/auth/reset-password', async (req, res) => {
-  const { token, password } = req.body || {};
-  if (!token || !password) {
-    return res.status(400).json({ error: 'Token and password are required' });
+  const { email, token, password } = req.body || {};
+  if (!email || !token || !password) {
+    return res.status(400).json({ error: 'Email, token, and password are required' });
   }
   if (String(password).length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
   const data = await loadData();
-  const reset = data.passwordResets.find((entry) => entry.token === token && !entry.used);
+  const emailLower = String(email).toLowerCase();
+  const reset = data.passwordResets.find((entry) => {
+    if (!entry || entry.used || !entry.token || entry.token !== token) return false;
+    if (entry.expiresAt < Date.now()) return false;
+    if (entry.email && String(entry.email).toLowerCase() === emailLower) return true;
+    const user = data.users.find((item) => item.id === entry.userId);
+    return user?.email && String(user.email).toLowerCase() === emailLower;
+  });
   if (!reset || reset.expiresAt < Date.now()) {
     return res.status(400).json({ error: 'Reset token is invalid or expired' });
   }
@@ -895,6 +1107,63 @@ app.post('/api/auth/reset-password', async (req, res) => {
   user.passwordHash = await bcrypt.hash(String(password), 10);
   reset.used = true;
   reset.usedAt = new Date().toISOString();
+  await saveData(data);
+  return res.json({ ok: true });
+});
+
+app.get('/api/admin/password-resets', async (req, res) => {
+  const data = await loadData();
+  const resets = paginateList(data.passwordResets, req).map((entry) => {
+    const user = data.users.find((item) => item.id === entry.userId);
+    return {
+      ...entry,
+      email: entry.email || user?.email || '',
+      name: entry.name || user?.name || ''
+    };
+  });
+  res.json({ resets });
+});
+
+app.patch('/api/admin/password-resets/:id', async (req, res) => {
+  const { id } = req.params;
+  const { sentAt } = req.body || {};
+  const data = await loadData();
+  const reset = data.passwordResets.find((entry) => entry.id === id);
+  if (!reset) {
+    return res.status(404).json({ error: 'Reset request not found' });
+  }
+  if (sentAt) {
+    reset.sentAt = typeof sentAt === 'string' ? sentAt : new Date().toISOString();
+  }
+  await saveData(data);
+  return res.json({ reset });
+});
+
+app.delete('/api/admin/password-resets/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = await loadData();
+  const existing = data.passwordResets.find((entry) => entry.id === id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Reset request not found' });
+  }
+  if (!existing.used) {
+    return res.status(400).json({ error: 'Only used reset requests can be deleted' });
+  }
+  data.passwordResets = data.passwordResets.filter((entry) => entry.id !== id);
+  await saveData(data);
+  return res.json({ ok: true });
+});
+app.delete('/api/admin/password-resets/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = await loadData();
+  const existing = data.passwordResets.find((entry) => entry.id === id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Reset request not found' });
+  }
+  if (!existing.used) {
+    return res.status(400).json({ error: 'Only used reset requests can be deleted' });
+  }
+  data.passwordResets = data.passwordResets.filter((entry) => entry.id !== id);
   await saveData(data);
   return res.json({ ok: true });
 });
@@ -1041,7 +1310,8 @@ app.post('/api/customers/record-order', authMiddleware, async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   const data = await loadData();
-  res.json({ products: data.products });
+  const language = sanitizeLanguage(req.query.lang);
+  res.json({ products: data.products.map((product) => localizeProduct(product, language)) });
 });
 
 app.patch('/api/admin/products/:id', async (req, res) => {
@@ -1053,32 +1323,44 @@ app.patch('/api/admin/products/:id', async (req, res) => {
   }
 
   const updates = req.body || {};
-  Object.assign(product, updates, { id: product.id });
+  const language = sanitizeLanguage(updates.lang);
+  const { lang: _ignoredLang, name, description, ...otherUpdates } = updates;
+  Object.assign(product, otherUpdates, { id: product.id });
+  if (name !== undefined) {
+    product.name = mergeLocalizedText(product.name, name, language);
+  }
+  if (description !== undefined) {
+    product.description = mergeLocalizedText(product.description, description, language);
+  }
   await saveData(data);
-  return res.json({ product });
+  return res.json({ product: localizeProduct(product, language) });
 });
 
 app.get('/api/announcements', async (req, res) => {
   const data = await loadData();
-  res.json({ announcements: data.announcements });
+  const language = sanitizeLanguage(req.query.lang);
+  res.json({ announcements: data.announcements.map((entry) => localizeAnnouncement(entry, language)) });
 });
 
 app.post('/api/admin/announcements', async (req, res) => {
-  const { title, content, author } = req.body || {};
-  if (!title || !content) {
+  const { title, content, author, lang } = req.body || {};
+  const language = sanitizeLanguage(lang);
+  const normalizedTitle = mergeLocalizedText({}, title, language);
+  const normalizedContent = mergeLocalizedText({}, content, language);
+  if (!resolveLocalizedText(normalizedTitle, language) || !resolveLocalizedText(normalizedContent, language)) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const data = await loadData();
   const announcement = {
     id: nextId('ANN', data.announcements),
-    title,
-    content,
+    title: normalizedTitle,
+    content: normalizedContent,
     author: author || 'Admin',
     createdAt: new Date().toISOString()
   };
   data.announcements.unshift(announcement);
   await saveData(data);
-  res.json({ announcement });
+  res.json({ announcement: localizeAnnouncement(announcement, language) });
 });
 
 app.patch('/api/admin/announcements/:id', async (req, res) => {
@@ -1089,13 +1371,14 @@ app.patch('/api/admin/announcements/:id', async (req, res) => {
     return res.status(404).json({ error: 'Announcement not found' });
   }
 
-  const { title, content } = req.body || {};
-  if (title) announcement.title = title;
-  if (content) announcement.content = content;
+  const { title, content, lang } = req.body || {};
+  const language = sanitizeLanguage(lang);
+  if (title !== undefined) announcement.title = mergeLocalizedText(announcement.title, title, language);
+  if (content !== undefined) announcement.content = mergeLocalizedText(announcement.content, content, language);
   announcement.updatedAt = new Date().toISOString();
 
   await saveData(data);
-  res.json({ announcement });
+  res.json({ announcement: localizeAnnouncement(announcement, language) });
 });
 
 app.delete('/api/admin/announcements/:id', async (req, res) => {
@@ -1108,26 +1391,30 @@ app.delete('/api/admin/announcements/:id', async (req, res) => {
 
 app.get('/api/gallery', async (req, res) => {
   const data = await loadData();
-  res.json({ gallery: data.gallery });
+  const language = sanitizeLanguage(req.query.lang);
+  res.json({ gallery: data.gallery.map((item) => localizeGalleryItem(item, language)) });
 });
 
 app.post('/api/admin/gallery', async (req, res) => {
-  const { title, description, category, imageUrl } = req.body || {};
-  if (!title || !category || !imageUrl) {
+  const { title, description, category, imageUrl, lang } = req.body || {};
+  const language = sanitizeLanguage(lang);
+  const normalizedTitle = mergeLocalizedText({}, title, language);
+  const normalizedDescription = mergeLocalizedText({}, description, language);
+  if (!resolveLocalizedText(normalizedTitle, language) || !category || !imageUrl) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   const data = await loadData();
   const item = {
     id: nextId('GAL', data.gallery),
-    title,
-    description: description || '',
+    title: normalizedTitle,
+    description: normalizedDescription,
     category,
     imageUrl,
     createdAt: new Date().toISOString()
   };
   data.gallery.unshift(item);
   await saveData(data);
-  res.json({ item });
+  res.json({ item: localizeGalleryItem(item, language) });
 });
 
 app.patch('/api/admin/gallery/:id', async (req, res) => {
@@ -1138,9 +1425,10 @@ app.patch('/api/admin/gallery/:id', async (req, res) => {
     return res.status(404).json({ error: 'Gallery item not found' });
   }
 
-  const { title, description, category, imageUrl } = req.body || {};
-  if (title) item.title = title;
-  if (typeof description === 'string') item.description = description;
+  const { title, description, category, imageUrl, lang } = req.body || {};
+  const language = sanitizeLanguage(lang);
+  if (title !== undefined) item.title = mergeLocalizedText(item.title, title, language);
+  if (description !== undefined) item.description = mergeLocalizedText(item.description, description, language);
   if (category) item.category = category;
   if (imageUrl && imageUrl !== item.imageUrl) {
     const oldImageUrl = item.imageUrl;
@@ -1150,7 +1438,7 @@ app.patch('/api/admin/gallery/:id', async (req, res) => {
   item.updatedAt = new Date().toISOString();
 
   await saveData(data);
-  res.json({ item });
+  res.json({ item: localizeGalleryItem(item, language) });
 });
 
 app.delete('/api/admin/gallery/:id', async (req, res) => {
@@ -1187,7 +1475,7 @@ app.post('/api/messages', async (req, res) => {
 
 app.get('/api/admin/messages', async (req, res) => {
   const data = await loadData();
-  res.json({ messages: data.messages });
+  res.json({ messages: paginateList(data.messages, req) });
 });
 
 app.patch('/api/admin/messages/:id', async (req, res) => {
@@ -1267,7 +1555,7 @@ app.delete('/api/orders/my', authMiddleware, async (req, res) => {
 
 app.get('/api/admin/orders', async (req, res) => {
   const data = await loadData();
-  res.json({ orders: data.orders });
+  res.json({ orders: paginateList(data.orders, req) });
 });
 
 app.patch('/api/admin/orders/:id', async (req, res) => {
@@ -1292,12 +1580,12 @@ app.get('/api/admin/accounts', async (req, res) => {
     customerId: user.customerId,
     createdAt: user.createdAt
   }));
-  res.json({ accounts });
+  res.json({ accounts: paginateList(accounts, req) });
 });
 
 app.get('/api/admin/customers', async (req, res) => {
   const data = await loadData();
-  res.json({ customers: data.customers });
+  res.json({ customers: paginateList(data.customers, req) });
 });
 
 if (NODE_ENV === 'production') {

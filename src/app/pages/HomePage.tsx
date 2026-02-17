@@ -1,10 +1,12 @@
 import { ShoppingCart, CheckCircle, Truck, Heart, Megaphone, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 
 export function HomePage() {
   const { setCurrentPage, products, announcements } = useApp();
+  const { t } = useI18n();
   
   const featuredProducts = products.slice(0, 4);
   
@@ -23,14 +25,13 @@ export function HomePage() {
         <div className="relative container mx-auto px-4 h-full flex items-center">
           <div className="max-w-2xl">
             <div className="inline-block bg-[#FFD700] text-[#3D2817] px-4 py-2 rounded-full mb-6">
-              <span className="text-sm font-semibold">Fresh from our farm to your table</span>
+              <span className="text-sm font-semibold">{t('home.heroBadge')}</span>
             </div>
             <h1 className="text-5xl md:text-6xl font-bold text-[#FFFDD0] mb-6 leading-tight">
-              Premium Quality<br />Farm Fresh Eggs
+              {t('home.heroTitle1')}<br />{t('home.heroTitle2')}
             </h1>
             <p className="text-xl text-[#FAF3E0] mb-8 leading-relaxed">
-              Raised with care on our 5,000-chicken farm in Eastern Rwanda. 
-              Free-range, healthy, and delivered fresh to your doorstep.
+              {t('home.heroDescription')}
             </p>
             <div className="flex flex-wrap gap-4">
               <Button
@@ -39,7 +40,7 @@ export function HomePage() {
                 className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
               >
                 <ShoppingCart className="mr-2 h-5 w-5" />
-                Shop Now
+                {t('home.shopNow')}
               </Button>
               <Button
                 onClick={() => setCurrentPage('about')}
@@ -47,7 +48,7 @@ export function HomePage() {
                 variant="outline"
                 className="border-2 border-[#FFFDD0] text-[#FFFDD0] hover:bg-[#FFFDD0] hover:text-[#8B4513]"
               >
-                Learn More
+                {t('home.learnMore')}
               </Button>
             </div>
           </div>
@@ -62,32 +63,32 @@ export function HomePage() {
               <div className="w-16 h-16 bg-[#228B22] rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-xl mb-2 text-[#3D2817]">100% Natural</h3>
-              <p className="text-sm text-[#6B5344]">No hormones or antibiotics. Just natural, healthy eggs.</p>
+              <h3 className="text-xl mb-2 text-[#3D2817]">{t('home.values.naturalTitle')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.values.naturalDesc')}</p>
             </Card>
             
             <Card className="p-6 text-center bg-white border-2 border-[#D2B48C] hover:border-[#FFD700] transition-colors">
               <div className="w-16 h-16 bg-[#C41E3A] rounded-full flex items-center justify-center mx-auto mb-4">
                 <Heart className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-xl mb-2 text-[#3D2817]">Free-Range</h3>
-              <p className="text-sm text-[#6B5344]">Our chickens roam freely in spacious, clean environments.</p>
+              <h3 className="text-xl mb-2 text-[#3D2817]">{t('home.values.freeRangeTitle')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.values.freeRangeDesc')}</p>
             </Card>
             
             <Card className="p-6 text-center bg-white border-2 border-[#D2B48C] hover:border-[#FFD700] transition-colors">
               <div className="w-16 h-16 bg-[#D2691E] rounded-full flex items-center justify-center mx-auto mb-4">
                 <Truck className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-xl mb-2 text-[#3D2817]">Fast Delivery</h3>
-              <p className="text-sm text-[#6B5344]">Local delivery within 24 hours. Fresh and reliable.</p>
+              <h3 className="text-xl mb-2 text-[#3D2817]">{t('home.values.fastTitle')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.values.fastDesc')}</p>
             </Card>
             
             <Card className="p-6 text-center bg-white border-2 border-[#D2B48C] hover:border-[#FFD700] transition-colors">
               <div className="w-16 h-16 bg-[#FFD700] rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="h-8 w-8 text-[#3D2817]" />
               </div>
-              <h3 className="text-xl mb-2 text-[#3D2817]">Quality Guaranteed</h3>
-              <p className="text-sm text-[#6B5344]">Every egg is carefully inspected for quality and freshness.</p>
+              <h3 className="text-xl mb-2 text-[#3D2817]">{t('home.values.qualityTitle')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.values.qualityDesc')}</p>
             </Card>
           </div>
         </div>
@@ -97,9 +98,9 @@ export function HomePage() {
       <section className="py-16 bg-[#FFFDD0]">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
-            <h2 className="text-4xl mb-4 text-[#3D2817]">Our Premium Eggs</h2>
+            <h2 className="text-4xl mb-4 text-[#3D2817]">{t('home.productsTitle')}</h2>
             <p className="text-lg text-[#6B5344] max-w-2xl mx-auto">
-              Fresh eggs available in different sizes. All eggs are collected daily and delivered fresh.
+              {t('home.productsDesc')}
             </p>
           </div>
           
@@ -118,13 +119,13 @@ export function HomePage() {
                   <p className="text-sm text-[#6B5344] mb-4">{product.description}</p>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-2xl text-[#C41E3A]">{product.price.toLocaleString()} FRW</span>
-                    <span className="text-sm text-[#6B5344]">Stock: {product.stock}</span>
+                    <span className="text-sm text-[#6B5344]">{t('home.stockLabel')} {product.stock}</span>
                   </div>
                   <Button
                     onClick={() => setCurrentPage('shop')}
                     className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
                   >
-                    View Details
+                    {t('home.viewDetails')}
                   </Button>
                 </div>
               </Card>
@@ -137,7 +138,7 @@ export function HomePage() {
               size="lg"
               className="bg-[#8B4513] hover:bg-[#A0522D] text-white"
             >
-              View All Products
+              {t('home.viewAllProducts')}
             </Button>
           </div>
         </div>
@@ -149,15 +150,15 @@ export function HomePage() {
           <div className="text-center mb-8">
             <h2 className="text-3xl mb-2 text-[#3D2817] flex items-center justify-center gap-3">
               <Megaphone className="h-6 w-6 text-[#C41E3A]" />
-              Latest Announcements
+              {t('home.announcementsTitle')}
             </h2>
-            <p className="text-sm text-[#6B5344]">News and updates from Goodrich Farm</p>
+            <p className="text-sm text-[#6B5344]">{t('home.announcementsSubtitle')}</p>
           </div>
 
           <div className="max-w-4xl mx-auto space-y-4">
             {announcements.length === 0 ? (
               <Card className="p-6 bg-white border-2 border-[#D2B48C] text-center">
-                <p className="text-[#6B5344]">No announcements at the moment. Check back soon.</p>
+                <p className="text-[#6B5344]">{t('home.noAnnouncements')}</p>
               </Card>
             ) : (
               announcements.slice(0, 3).map(a => (
@@ -184,7 +185,7 @@ export function HomePage() {
       {/* Testimonials */}
       <section className="py-16 bg-[#F0EAD6]">
         <div className="container mx-auto px-4">
-          <h2 className="text-4xl text-center mb-12 text-[#3D2817]">What Our Customers Say</h2>
+          <h2 className="text-4xl text-center mb-12 text-[#3D2817]">{t('home.testimonialsTitle')}</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="p-6 bg-white border-2 border-[#D2B48C]">
@@ -194,11 +195,11 @@ export function HomePage() {
                 ))}
               </div>
               <p className="text-[#3D2817] mb-4 italic">
-                "The freshest eggs I've ever had! Delivery is always on time and the quality is exceptional."
+                "{t('home.testimonials.one.quote')}"
               </p>
               <div className="border-t border-[#D2B48C] pt-4">
-                <p className="font-semibold text-[#8B4513]">Marie Uwase</p>
-                <p className="text-sm text-[#6B5344]">Kigali</p>
+                <p className="font-semibold text-[#8B4513]">{t('home.testimonials.one.name')}</p>
+                <p className="text-sm text-[#6B5344]">{t('home.testimonials.one.place')}</p>
               </div>
             </Card>
             
@@ -209,11 +210,11 @@ export function HomePage() {
                 ))}
               </div>
               <p className="text-[#3D2817] mb-4 italic">
-                "I love knowing where my food comes from. Goodrich Farm's transparency and quality are unmatched!"
+                "{t('home.testimonials.two.quote')}"
               </p>
               <div className="border-t border-[#D2B48C] pt-4">
-                <p className="font-semibold text-[#8B4513]">Jean Paul Nkusi</p>
-                <p className="text-sm text-[#6B5344]">Kayonza</p>
+                <p className="font-semibold text-[#8B4513]">{t('home.testimonials.two.name')}</p>
+                <p className="text-sm text-[#6B5344]">{t('home.testimonials.two.place')}</p>
               </div>
             </Card>
             
@@ -224,11 +225,11 @@ export function HomePage() {
                 ))}
               </div>
               <p className="text-[#3D2817] mb-4 italic">
-                "Best farm eggs in Rwanda! Perfect for my restaurant. Consistent quality every single time."
+                "{t('home.testimonials.three.quote')}"
               </p>
               <div className="border-t border-[#D2B48C] pt-4">
-                <p className="font-semibold text-[#8B4513]">Grace Mutoni</p>
-                <p className="text-sm text-[#6B5344]">Restaurant Owner</p>
+                <p className="font-semibold text-[#8B4513]">{t('home.testimonials.three.name')}</p>
+                <p className="text-sm text-[#6B5344]">{t('home.testimonials.three.place')}</p>
               </div>
             </Card>
           </div>
@@ -238,9 +239,9 @@ export function HomePage() {
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-[#8B4513] to-[#C41E3A]">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl mb-6 text-[#FFFDD0]">Ready to Order Fresh Eggs?</h2>
+          <h2 className="text-4xl mb-6 text-[#FFFDD0]">{t('home.ctaTitle')}</h2>
           <p className="text-xl text-[#FAF3E0] mb-8 max-w-2xl mx-auto">
-            Experience the difference of truly fresh, farm-raised eggs. Order today and taste the quality!
+            {t('home.ctaDesc')}
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button
@@ -249,7 +250,7 @@ export function HomePage() {
               className="bg-[#FFD700] hover:bg-[#FF8C00] text-[#3D2817]"
             >
               <ShoppingCart className="mr-2 h-5 w-5" />
-              Start Shopping
+              {t('home.startShopping')}
             </Button>
             <Button
               onClick={() => setCurrentPage('contact')}
@@ -257,7 +258,7 @@ export function HomePage() {
               variant="outline"
               className="border-2 border-[#FFFDD0] text-[#FFFDD0] hover:bg-[#FFFDD0] hover:text-[#8B4513]"
             >
-              Contact Us
+              {t('home.contactUs')}
             </Button>
           </div>
         </div>

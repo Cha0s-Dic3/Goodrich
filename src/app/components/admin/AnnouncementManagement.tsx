@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from 'sonner';
 
 export function AnnouncementManagement() {
-  const { announcements, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useApp();
+  const { announcements, addAnnouncement, updateAnnouncement, deleteAnnouncement, language } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -94,6 +94,9 @@ export function AnnouncementManagement() {
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-[#6B5344]">
+        Editing announcement translations for: <span className="font-semibold uppercase">{language}</span>
+      </p>
       <div className="flex items-center justify-between">
         <h2 className="text-3xl text-[#3D2817] flex items-center gap-2">
           <Megaphone className="h-8 w-8 text-[#C41E3A]" />

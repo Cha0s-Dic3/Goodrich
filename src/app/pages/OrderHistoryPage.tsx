@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Package, Calendar, MapPin, User, Phone, Mail, Eye, Filter, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -18,7 +19,10 @@ export function OrderHistoryPage() {
     isUserLoggedIn,
     clearOrderHistory
   } = useApp();
+  const { t, language } = useI18n();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const localeMap = { en: 'en-US', rw: 'rw-RW', sw: 'sw-TZ', fr: 'fr-FR' } as const;
+  const locale = localeMap[language];
 
   useEffect(() => {
     if (!isUserLoggedIn) {
@@ -64,22 +68,24 @@ export function OrderHistoryPage() {
     if (!confirm('Clear your entire order history? This cannot be undone.')) return;
     try {
       await clearOrderHistory();
-      toast.success('Order history cleared');
+      toast.success(t('orders.historyCleared'));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to clear order history');
+      toast.error(err?.message || t('orders.clearFailed'));
     }
   };
 
   const handleRetryPayment = async (ref: string) => {
     try {
       const newRef = await retryPayment(ref);
-      toast.success(`Payment retry started. New ref: ${newRef}`);
+      toast.success(t('orders.retryStarted', { ref: newRef }));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to retry payment');
+      toast.error(err?.message || t('orders.retryFailed'));
     }
   };
 
   const visiblePayments = payments.filter((payment) => !payment.orderId);
+  const canRetry = (payment: typeof payments[number]) =>
+    payment.status === 'failed' && payment.method !== 'manual-momo';
 
   return (
     <div className="min-h-screen bg-[#FFFDD0]">
@@ -89,10 +95,10 @@ export function OrderHistoryPage() {
           <div className="max-w-3xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2 flex items-center gap-3">
               <Package className="h-10 w-10" />
-              Order History
+              {t('orders.title')}
             </h1>
             <p className="text-lg text-[#FAF3E0]">
-              Track your orders and their delivery status
+              {t('orders.subtitle')}
             </p>
           </div>
         </div>
@@ -103,7 +109,7 @@ export function OrderHistoryPage() {
         <div className="container mx-auto px-4">
           {visiblePayments.length > 0 && (
             <Card className="p-6 bg-white border-2 border-[#D2B48C] mb-8">
-              <h2 className="text-2xl font-bold text-[#3D2817] mb-4">Pending Payments</h2>
+              <h2 className="text-2xl font-bold text-[#3D2817] mb-4">{t('orders.paymentRequests')}</h2>
               <div className="space-y-3">
                 {visiblePayments.map((payment) => (
                   <div
@@ -111,24 +117,31 @@ export function OrderHistoryPage() {
                     className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border border-[#F0EAD6] rounded-lg p-4"
                   >
                     <div>
-                      <p className="text-sm text-[#6B5344]">Ref: {payment.ref}</p>
+                      <p className="text-sm text-[#6B5344]">{t('orders.ref')}: {payment.ref}</p>
                       <p className="font-semibold text-[#3D2817]">
-                        Amount: {payment.amount?.toLocaleString?.() || payment.amount} FRW
+                        {t('orders.amount')}: {payment.amount?.toLocaleString?.() || payment.amount} FRW
                       </p>
                       <p className="text-xs text-[#6B5344]">
-                        Status: {payment.status}
+                        {t('orders.status')}: {payment.status}
                         {payment.failureReason ? ` | ${payment.failureReason}` : ''}
                       </p>
+                      {payment.expiresAt && (
+                        <p className="text-xs text-[#6B5344]">
+                          {t('orders.expires')}: {new Date(payment.expiresAt).toLocaleTimeString(locale)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
-                        onClick={() => handleRetryPayment(payment.ref)}
-                        disabled={payment.status === 'successful'}
-                      >
-                        Retry Payment
-                      </Button>
+                      {canRetry(payment) && (
+                        <Button
+                          size="sm"
+                          className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
+                          onClick={() => handleRetryPayment(payment.ref)}
+                          disabled={payment.status === 'successful'}
+                        >
+                          {t('orders.retryPayment')}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -138,16 +151,16 @@ export function OrderHistoryPage() {
           {orders.length === 0 ? (
             <Card className="p-12 bg-white border-2 border-[#D2B48C] text-center">
               <Package className="h-20 w-20 text-[#D2B48C] mx-auto mb-6" />
-              <h2 className="text-3xl mb-2 text-[#3D2817]">No Orders Yet</h2>
+              <h2 className="text-3xl mb-2 text-[#3D2817]">{t('orders.noOrders')}</h2>
               <p className="text-[#6B5344] mb-8">
-                You haven't placed any orders yet. Start shopping now!
+                {t('orders.noOrdersDesc')}
               </p>
               <Button
                 onClick={() => setCurrentPage('shop')}
                 className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
                 size="lg"
               >
-                Browse Products
+                {t('orders.browseProducts')}
               </Button>
             </Card>
           ) : (
@@ -156,7 +169,7 @@ export function OrderHistoryPage() {
               <Card className="p-6 bg-white border-2 border-[#D2B48C]">
                 <div className="flex items-center gap-3 mb-4">
                   <Filter className="h-5 w-5 text-[#C41E3A]" />
-                  <h2 className="text-lg font-bold text-[#3D2817]">Filter by Status</h2>
+                  <h2 className="text-lg font-bold text-[#3D2817]">{t('orders.filterByStatus')}</h2>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -168,7 +181,7 @@ export function OrderHistoryPage() {
                     }`}
                     size="sm"
                   >
-                    All Orders
+                    {t('orders.allOrders')}
                   </Button>
                   {['pending', 'confirmed', 'processing', 'out-for-delivery', 'delivered', 'cancelled'].map(status => (
                     <Button
@@ -193,7 +206,7 @@ export function OrderHistoryPage() {
                     size="sm"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Clear History
+                    {t('orders.clearHistory')}
                   </Button>
                 </div>
               </Card>
@@ -202,7 +215,7 @@ export function OrderHistoryPage() {
               <div className="space-y-4">
                 {filteredOrders.length === 0 ? (
                   <Card className="p-8 bg-white border-2 border-[#D2B48C] text-center">
-                    <p className="text-[#6B5344]">No orders found with selected status</p>
+                    <p className="text-[#6B5344]">{t('orders.noneForStatus')}</p>
                   </Card>
                 ) : (
                   filteredOrders.map(order => (
@@ -210,7 +223,7 @@ export function OrderHistoryPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                         {/* Order ID */}
                         <div>
-                          <p className="text-sm text-[#6B5344] mb-1">Order ID</p>
+                          <p className="text-sm text-[#6B5344] mb-1">{t('orders.orderId')}</p>
                           <p className="font-bold text-[#3D2817]">{order.id}</p>
                         </div>
 
@@ -218,16 +231,16 @@ export function OrderHistoryPage() {
                         <div>
                           <p className="text-sm text-[#6B5344] mb-1 flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            Order Date
+                            {t('orders.orderDate')}
                           </p>
                           <p className="font-semibold text-[#3D2817]">
-                            {new Date(order.createdAt).toLocaleDateString()}
+                            {new Date(order.createdAt).toLocaleDateString(locale)}
                           </p>
                         </div>
 
                         {/* Total Amount */}
                         <div>
-                          <p className="text-sm text-[#6B5344] mb-1">Total Amount</p>
+                          <p className="text-sm text-[#6B5344] mb-1">{t('orders.totalAmount')}</p>
                           <p className="font-bold text-[#C41E3A]">
                             {(order.totalAmount + order.deliveryFee).toLocaleString()} FRW
                           </p>
@@ -235,15 +248,15 @@ export function OrderHistoryPage() {
 
                         {/* Items Count */}
                         <div>
-                          <p className="text-sm text-[#6B5344] mb-1">Items</p>
+                          <p className="text-sm text-[#6B5344] mb-1">{t('orders.items')}</p>
                           <p className="font-semibold text-[#3D2817]">
-                            {order.items.reduce((sum, item) => sum + item.quantity, 0)} pieces
+                            {order.items.reduce((sum, item) => sum + item.quantity, 0)} {t('orders.pieces')}
                           </p>
                         </div>
 
                         {/* Status */}
                         <div>
-                          <p className="text-sm text-[#6B5344] mb-1">Status</p>
+                          <p className="text-sm text-[#6B5344] mb-1">{t('orders.status')}</p>
                           <Badge className={`border-2 ${getStatusColor(order.status)}`}>
                             {getStatusLabel(order.status)}
                           </Badge>
@@ -261,14 +274,14 @@ export function OrderHistoryPage() {
                         <div className="flex items-start gap-3">
                           <MapPin className="h-5 w-5 text-[#C41E3A] flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="text-sm text-[#6B5344]">Delivery Address</p>
+                          <p className="text-sm text-[#6B5344]">{t('orders.deliveryAddress')}</p>
                             <p className="font-semibold text-[#3D2817] text-sm">{order.deliveryAddress}</p>
                           </div>
                         </div>
                         <div>
-                          <p className="text-sm text-[#6B5344] mb-1">Delivery Date</p>
+                          <p className="text-sm text-[#6B5344] mb-1">{t('orders.deliveryDate')}</p>
                           <p className="font-semibold text-[#3D2817]">
-                            {new Date(order.deliveryDate).toLocaleDateString()}
+                            {new Date(order.deliveryDate).toLocaleDateString(locale)}
                           </p>
                           {order.deliveryTimeWindow && (
                             <p className="text-xs text-[#6B5344]">{order.deliveryTimeWindow}</p>
@@ -285,7 +298,7 @@ export function OrderHistoryPage() {
                               size="sm"
                             >
                               <Eye className="h-4 w-4 mr-2" />
-                              View Details
+                              {t('orders.viewDetails')}
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl">
@@ -299,11 +312,11 @@ export function OrderHistoryPage() {
                               <div className="bg-[#F0EAD6] p-4 rounded-lg">
                                 <h3 className="font-bold text-[#3D2817] mb-3 flex items-center gap-2">
                                   <User className="h-5 w-5" />
-                                  Customer Information
+                                  {t('orders.customerInformation')}
                                 </h3>
                                 <div className="space-y-2">
                                   <p className="text-sm text-[#6B5344]">
-                                    <span className="font-semibold">Name:</span> {order.customerName}
+                                    <span className="font-semibold">{t('orders.name')}:</span> {order.customerName}
                                   </p>
                                   <div className="flex items-center gap-2">
                                     <Phone className="h-4 w-4 text-[#C41E3A]" />
@@ -320,13 +333,13 @@ export function OrderHistoryPage() {
 
                               {/* Items */}
                               <div>
-                                <h3 className="font-bold text-[#3D2817] mb-3">Order Items</h3>
+                                <h3 className="font-bold text-[#3D2817] mb-3">{t('orders.orderItems')}</h3>
                                 <div className="space-y-2">
                                   {order.items.map((item, index) => (
                                     <div key={index} className="flex justify-between items-center p-3 bg-[#F0EAD6] rounded-lg">
                                       <div>
                                         <p className="font-semibold text-[#3D2817]">{item.product.name}</p>
-                                        <p className="text-sm text-[#6B5344]">Quantity: {item.quantity}</p>
+                                        <p className="text-sm text-[#6B5344]">{t('orders.quantity')}: {item.quantity}</p>
                                       </div>
                                       <p className="font-bold text-[#C41E3A]">
                                         {(item.product.price * item.quantity).toLocaleString()} FRW
@@ -340,19 +353,19 @@ export function OrderHistoryPage() {
                               <div className="bg-[#F0EAD6] p-4 rounded-lg">
                                 <div className="space-y-2">
                                   <div className="flex justify-between">
-                                    <span className="text-[#6B5344]">Subtotal:</span>
+                                    <span className="text-[#6B5344]">{t('orders.subtotal')}:</span>
                                     <span className="font-semibold text-[#3D2817]">
                                       {order.totalAmount.toLocaleString()} FRW
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
-                                    <span className="text-[#6B5344]">Delivery Fee:</span>
+                                    <span className="text-[#6B5344]">{t('orders.deliveryFee')}:</span>
                                     <span className="font-semibold text-[#3D2817]">
                                       {order.deliveryFee.toLocaleString()} FRW
                                     </span>
                                   </div>
                                   <div className="border-t border-[#D2B48C] pt-2 flex justify-between">
-                                    <span className="font-bold text-[#3D2817]">Total:</span>
+                                    <span className="font-bold text-[#3D2817]">{t('orders.total')}:</span>
                                     <span className="text-2xl font-bold text-[#C41E3A]">
                                       {(order.totalAmount + order.deliveryFee).toLocaleString()} FRW
                                     </span>
@@ -363,7 +376,7 @@ export function OrderHistoryPage() {
                               {/* Notes */}
                               {order.notes && (
                                 <div>
-                                  <h3 className="font-bold text-[#3D2817] mb-2">Notes</h3>
+                                  <h3 className="font-bold text-[#3D2817] mb-2">{t('orders.notes')}</h3>
                                   <p className="text-sm text-[#6B5344] bg-[#F0EAD6] p-3 rounded-lg">
                                     {order.notes}
                                   </p>
@@ -388,7 +401,7 @@ export function OrderHistoryPage() {
               className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513] hover:text-white"
               size="lg"
             >
-              Continue Shopping
+              {t('orders.continueShopping')}
             </Button>
           </div>
         </div>

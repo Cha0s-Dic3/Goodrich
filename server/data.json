@@ -4,7 +4,7 @@
       "id": "USR-001",
       "name": "mupenzi cedrick",
       "email": "mupenzicedrick58@gmail.com",
-      "passwordHash": "$2a$10$Lxy5rgyemO2/8v6WHjPqj.1mbSgOWR63yNT86TgyS.n/TfUQUt1/i",
+      "passwordHash": "$2a$10$fkLlaq9O3n5AFLwhYzKaYuJo9AjQiW6XtT8MHibcrBKcA6P3S1IDi",
       "customerId": "CUST-001",
       "createdAt": "2026-02-10T09:57:30.587Z",
       "phone": "0780129985",
@@ -93,6 +93,90 @@
   ],
   "orders": [],
   "pendingPayments": [],
+  "passwordResets": [
+    {
+      "id": "RST-009",
+      "userId": "USR-001",
+      "email": "mupenzicedrick58@gmail.com",
+      "name": "mupenzi cedrick",
+      "token": "423217",
+      "hasAccount": true,
+      "createdAt": "2026-02-16T06:17:32.830Z",
+      "expiresAt": 1771226252830,
+      "used": false
+    },
+    {
+      "id": "RST-008",
+      "userId": "USR-001",
+      "email": "mupenzicedrick58@gmail.com",
+      "name": "mupenzi cedrick",
+      "token": "422086",
+      "hasAccount": true,
+      "createdAt": "2026-02-16T06:16:30.511Z",
+      "expiresAt": 1771226190511,
+      "used": true,
+      "usedAt": "2026-02-16T06:17:59.284Z"
+    },
+    {
+      "id": "RST-007",
+      "userId": "USR-001",
+      "email": "mupenzicedrick58@gmail.com",
+      "name": "mupenzi cedrick",
+      "token": "597067",
+      "hasAccount": true,
+      "createdAt": "2026-02-14T15:44:14.238Z",
+      "expiresAt": 1771087454238,
+      "used": false
+    },
+    {
+      "id": "RST-006",
+      "userId": "USR-001",
+      "token": "878027",
+      "createdAt": "2026-02-14T15:15:56.445Z",
+      "expiresAt": 1771085756444,
+      "used": false
+    },
+    {
+      "id": "RST-005",
+      "userId": "USR-001",
+      "token": "291973",
+      "createdAt": "2026-02-14T15:03:55.191Z",
+      "expiresAt": 1771085035191,
+      "used": false
+    },
+    {
+      "id": "RST-004",
+      "userId": "USR-001",
+      "token": "299389",
+      "createdAt": "2026-02-14T13:57:10.680Z",
+      "expiresAt": 1771081030670,
+      "used": false
+    },
+    {
+      "id": "RST-003",
+      "userId": "USR-001",
+      "token": "365832",
+      "createdAt": "2026-02-14T12:41:41.269Z",
+      "expiresAt": 1771076501268,
+      "used": false
+    },
+    {
+      "id": "RST-002",
+      "userId": "USR-001",
+      "token": "735994",
+      "createdAt": "2026-02-14T12:29:38.116Z",
+      "expiresAt": 1771075778116,
+      "used": false
+    },
+    {
+      "id": "RST-001",
+      "userId": "USR-001",
+      "token": "948209",
+      "createdAt": "2026-02-14T12:28:39.229Z",
+      "expiresAt": 1771075719227,
+      "used": false
+    }
+  ],
   "announcements": [],
   "messages": [
     {

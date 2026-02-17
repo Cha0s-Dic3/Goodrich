@@ -6,9 +6,11 @@ import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 
 export function ContactPage() {
   const { createMessage } = useApp();
+  const { t } = useI18n();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -24,10 +26,10 @@ export function ContactPage() {
     setIsSubmitting(true);
     try {
       await createMessage(formData);
-      toast.success('Message sent! We will get back to you soon.');
+      toast.success(t('contact.messageSent'));
       setFormData({ name: '', email: '', phone: '', message: '' });
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send message');
+      toast.error(err?.message || t('contact.messageFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -39,9 +41,9 @@ export function ContactPage() {
       <section className="py-20 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl mb-6 text-[#FFFDD0]">Contact Us</h1>
+            <h1 className="text-5xl mb-6 text-[#FFFDD0]">{t('contact.title')}</h1>
             <p className="text-xl text-[#FAF3E0]">
-              Have questions? We're here to help. Reach out to us through any of the channels below.
+              {t('contact.subtitle')}
             </p>
           </div>
         </div>
@@ -53,7 +55,7 @@ export function ContactPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
             {/* Contact Information */}
             <div>
-              <h2 className="text-3xl mb-8 text-[#3D2817]">Get In Touch</h2>
+              <h2 className="text-3xl mb-8 text-[#3D2817]">{t('contact.getInTouch')}</h2>
               
               <div className="space-y-6">
                 {/* Location */}
@@ -63,11 +65,11 @@ export function ContactPage() {
                       <MapPin className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-xl mb-2 text-[#3D2817]">Our Location</h3>
+                      <h3 className="text-xl mb-2 text-[#3D2817]">{t('contact.locationTitle')}</h3>
                       <p className="text-[#6B5344]">
-                        Eastern Province<br />
-                        Kayonza District<br />
-                        Rukara Sector, Kawangire Cell
+                        {t('contact.locationLine1')}<br />
+                        {t('contact.locationLine2')}<br />
+                        {t('contact.locationLine3')}
                       </p>
                     </div>
                   </div>
@@ -80,11 +82,11 @@ export function ContactPage() {
                       <Phone className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-xl mb-2 text-[#3D2817]">Phone</h3>
+                      <h3 className="text-xl mb-2 text-[#3D2817]">{t('contact.phoneTitle')}</h3>
                       <a href="tel:0788455886" className="text-[#C41E3A] hover:underline text-lg">
                         0788455886
                       </a>
-                      <p className="text-sm text-[#6B5344] mt-1">Call us anytime</p>
+                      <p className="text-sm text-[#6B5344] mt-1">{t('contact.callAnytime')}</p>
                     </div>
                   </div>
                 </Card>
@@ -96,11 +98,11 @@ export function ContactPage() {
                       <Mail className="h-6 w-6 text-[#3D2817]" />
                     </div>
                     <div>
-                      <h3 className="text-xl mb-2 text-[#3D2817]">Email</h3>
+                      <h3 className="text-xl mb-2 text-[#3D2817]">{t('contact.emailTitle')}</h3>
                       <a href="mailto:info@goodrichfarm.rw" className="text-[#C41E3A] hover:underline">
                         info@goodrichfarm.rw
                       </a>
-                      <p className="text-sm text-[#6B5344] mt-1">We reply within 24 hours</p>
+                      <p className="text-sm text-[#6B5344] mt-1">{t('contact.reply24h')}</p>
                     </div>
                   </div>
                 </Card>
@@ -112,11 +114,11 @@ export function ContactPage() {
                       <Clock className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-xl mb-2 text-[#3D2817]">Business Hours</h3>
+                      <h3 className="text-xl mb-2 text-[#3D2817]">{t('contact.hoursTitle')}</h3>
                       <div className="text-[#6B5344] space-y-1">
-                        <p>Monday - Friday: 7:00 AM - 6:00 PM</p>
-                        <p>Saturday: 7:00 AM - 4:00 PM</p>
-                        <p>Sunday: Closed</p>
+                        <p>{t('contact.hoursWeekday')}</p>
+                        <p>{t('contact.hoursSaturday')}</p>
+                        <p>{t('contact.hoursSunday')}</p>
                       </div>
                     </div>
                   </div>
@@ -125,7 +127,7 @@ export function ContactPage() {
               
               {/* Social Media */}
               <div className="mt-8">
-                <h3 className="text-xl mb-4 text-[#3D2817]">Follow Us</h3>
+                <h3 className="text-xl mb-4 text-[#3D2817]">{t('contact.followUs')}</h3>
                 <div className="flex gap-3">
                   <a
                     href="#"
@@ -151,24 +153,24 @@ export function ContactPage() {
             
             {/* Contact Form */}
             <div>
-              <h2 className="text-3xl mb-8 text-[#3D2817]">Send Us a Message</h2>
+              <h2 className="text-3xl mb-8 text-[#3D2817]">{t('contact.sendMessageTitle')}</h2>
               
               <Card className="p-8 bg-white border-2 border-[#D2B48C]">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div>
-                    <label className="block mb-2 text-[#3D2817]">Your Name *</label>
+                    <label className="block mb-2 text-[#3D2817]">{t('contact.form.nameLabel')} *</label>
                     <Input
                       type="text"
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Enter your full name"
+                      placeholder={t('contact.form.namePlaceholder')}
                       className="border-[#D2B48C] focus:border-[#C41E3A]"
                     />
                   </div>
                   
                   <div>
-                    <label className="block mb-2 text-[#3D2817]">Email Address *</label>
+                    <label className="block mb-2 text-[#3D2817]">{t('contact.form.emailLabel')} *</label>
                     <Input
                       type="email"
                       required
@@ -180,24 +182,24 @@ export function ContactPage() {
                   </div>
                   
                   <div>
-                    <label className="block mb-2 text-[#3D2817]">Phone Number *</label>
+                    <label className="block mb-2 text-[#3D2817]">{t('contact.form.phoneLabel')} *</label>
                     <Input
                       type="tel"
                       required
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="Enter your phone number"
+                      placeholder={t('contact.form.phonePlaceholder')}
                       className="border-[#D2B48C] focus:border-[#C41E3A]"
                     />
                   </div>
                   
                   <div>
-                    <label className="block mb-2 text-[#3D2817]">Message *</label>
+                    <label className="block mb-2 text-[#3D2817]">{t('contact.form.messageLabel')} *</label>
                     <Textarea
                       required
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      placeholder="How can we help you?"
+                      placeholder={t('contact.form.messagePlaceholder')}
                       rows={5}
                       className="border-[#D2B48C] focus:border-[#C41E3A]"
                     />
@@ -209,7 +211,7 @@ export function ContactPage() {
                     size="lg"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Sending...' : 'Send Message'}
+                    {isSubmitting ? t('contact.form.sending') : t('contact.form.send')}
                   </Button>
                 </form>
               </Card>
@@ -222,35 +224,35 @@ export function ContactPage() {
       <section className="py-16 bg-[#F0EAD6]">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl mb-8 text-center text-[#3D2817]">Delivery Information</h2>
+            <h2 className="text-3xl mb-8 text-center text-[#3D2817]">{t('contact.deliveryTitle')}</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="p-6 bg-white border-2 border-[#228B22] text-center">
-                <h3 className="text-xl mb-3 text-[#3D2817]">Local Delivery</h3>
+                <h3 className="text-xl mb-3 text-[#3D2817]">{t('contact.delivery.localTitle')}</h3>
                 <div className="text-3xl text-[#C41E3A] mb-2">3,000 FRW</div>
-                <p className="text-sm text-[#6B5344] mb-2">Within 10km radius</p>
-                <p className="text-xs text-[#6B5344]">Next-day delivery available</p>
+                <p className="text-sm text-[#6B5344] mb-2">{t('contact.delivery.localDesc1')}</p>
+                <p className="text-xs text-[#6B5344]">{t('contact.delivery.localDesc2')}</p>
               </Card>
               
               <Card className="p-6 bg-white border-2 border-[#FFD700] text-center">
-                <h3 className="text-xl mb-3 text-[#3D2817]">Regional Delivery</h3>
+                <h3 className="text-xl mb-3 text-[#3D2817]">{t('contact.delivery.regionalTitle')}</h3>
                 <div className="text-3xl text-[#C41E3A] mb-2">10,000 FRW</div>
-                <p className="text-sm text-[#6B5344] mb-2">51-60km distance</p>
-                <p className="text-xs text-[#6B5344]">2 delivery days per week</p>
+                <p className="text-sm text-[#6B5344] mb-2">{t('contact.delivery.regionalDesc1')}</p>
+                <p className="text-xs text-[#6B5344]">{t('contact.delivery.regionalDesc2')}</p>
               </Card>
               
               <Card className="p-6 bg-white border-2 border-[#D2691E] text-center">
-                <h3 className="text-xl mb-3 text-[#3D2817]">National Shipping</h3>
-                <div className="text-3xl text-[#C41E3A] mb-2">Calculated</div>
-                <p className="text-sm text-[#6B5344] mb-2">By weight & zone</p>
-                <p className="text-xs text-[#6B5344]">Weekly dispatch schedule</p>
+                <h3 className="text-xl mb-3 text-[#3D2817]">{t('contact.delivery.nationalTitle')}</h3>
+                <div className="text-3xl text-[#C41E3A] mb-2">{t('contact.delivery.calculated')}</div>
+                <p className="text-sm text-[#6B5344] mb-2">{t('contact.delivery.nationalDesc1')}</p>
+                <p className="text-xs text-[#6B5344]">{t('contact.delivery.nationalDesc2')}</p>
               </Card>
             </div>
             
             <div className="mt-8 text-center">
               <Card className="p-6 bg-gradient-to-r from-[#FFD700] to-[#FF8C00] border-2 border-[#8B4513]">
                 <p className="text-[#3D2817]">
-                  <strong>Minimum Order:</strong> 4,500 FRW
+                  <strong>{t('contact.delivery.minimumLabel')}</strong> 4,500 FRW
                 </p>
               </Card>
             </div>

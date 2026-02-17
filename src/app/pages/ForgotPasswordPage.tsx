@@ -5,19 +5,22 @@ import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 
 export function ForgotPasswordPage() {
   const { setCurrentPage } = useApp();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      toast.error('Please enter your email');
+      toast.error(t('forgot.enterEmail'));
       return;
     }
     if (isSubmitting) return;
+    sessionStorage.removeItem('resetToken');
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/auth/forgot-password', {
@@ -27,18 +30,13 @@ export function ForgotPasswordPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to request reset');
+        throw new Error(data.error || t('forgot.requestFailed'));
       }
-      if (data.resetToken) {
-        sessionStorage.setItem('resetToken', data.resetToken);
-        toast.success('Reset token created. Continue to reset password.');
-        setCurrentPage('reset-password');
-      } else {
-        toast.success('If the email exists, a reset link will be sent.');
-        setCurrentPage('login');
-      }
+      sessionStorage.setItem('resetEmail', email);
+      toast.success(t('forgot.requestReceived'));
+      setCurrentPage('reset-password');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to request reset');
+      toast.error(err?.message || t('forgot.requestFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -49,8 +47,8 @@ export function ForgotPasswordPage() {
       <section className="py-12 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">Forgot Password</h1>
-            <p className="text-lg text-[#FAF3E0]">Enter your email to reset your password</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">{t('forgot.title')}</h1>
+            <p className="text-lg text-[#FAF3E0]">{t('forgot.subtitle')}</p>
           </div>
         </div>
       </section>
@@ -62,7 +60,7 @@ export function ForgotPasswordPage() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label htmlFor="email" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    Email Address
+                    {t('forgot.emailAddress')}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -70,7 +68,7 @@ export function ForgotPasswordPage() {
                       id="email"
                       name="email"
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={t('forgot.emailPlaceholder')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -84,7 +82,7 @@ export function ForgotPasswordPage() {
                   className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white font-semibold"
                   size="lg"
                 >
-                  {isSubmitting ? 'Please wait...' : 'Send Reset Link'}
+                  {isSubmitting ? t('forgot.pleaseWait') : t('forgot.requestCode')}
                 </Button>
 
                 <div className="text-center pt-4 border-t border-[#D2B48C]">
@@ -93,7 +91,7 @@ export function ForgotPasswordPage() {
                     onClick={() => setCurrentPage('login')}
                     className="text-sm font-semibold text-[#C41E3A] hover:text-[#A0522D] transition-colors"
                   >
-                    Back to Sign In
+                    {t('forgot.backToSignIn')}
                   </button>
                 </div>
               </form>

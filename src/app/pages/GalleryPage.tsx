@@ -2,42 +2,42 @@ import { useEffect, useState } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 
 export function GalleryPage() {
   const { gallery, loadGallery } = useApp();
+  const { t } = useI18n();
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   useEffect(() => {
     loadGallery();
   }, []);
-  
+
   const categories = [
-    { id: 'all', label: 'All Photos' },
-    { id: 'facilities', label: 'Farm Facilities' },
-    { id: 'chickens', label: 'Our Chickens' },
-    { id: 'team', label: 'Our Team' },
-    { id: 'eggs', label: 'Fresh Eggs' }
+    { id: 'all', label: t('gallery.filters.all') },
+    { id: 'facilities', label: t('gallery.filters.facilities') },
+    { id: 'chickens', label: t('gallery.filters.chickens') },
+    { id: 'team', label: t('gallery.filters.team') },
+    { id: 'eggs', label: t('gallery.filters.eggs') }
   ];
-  
+
   const filteredItems = selectedCategory === 'all'
     ? gallery
     : gallery.filter(item => item.category === selectedCategory);
-  
+
   return (
     <div className="min-h-screen bg-[#FFFDD0]">
-      {/* Hero Section */}
       <section className="py-20 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl mb-6 text-[#FFFDD0]">Farm Gallery</h1>
+            <h1 className="text-5xl mb-6 text-[#FFFDD0]">{t('gallery.heroTitle')}</h1>
             <p className="text-xl text-[#FAF3E0]">
-              Take a visual tour of our farm, facilities, and happy chickens. See where your eggs come from!
+              {t('gallery.heroDesc')}
             </p>
           </div>
         </div>
       </section>
-      
-      {/* Category Filter */}
+
       <section className="py-8 bg-[#F0EAD6] border-b-2 border-[#D2B48C] sticky top-20 z-40">
         <div className="container mx-auto px-4">
           <div className="flex flex-wrap gap-3 justify-center">
@@ -59,7 +59,6 @@ export function GalleryPage() {
         </div>
       </section>
 
-      {/* Gallery Grid */}
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -79,27 +78,25 @@ export function GalleryPage() {
               </Card>
             ))}
           </div>
-          
+
           {filteredItems.length === 0 && (
             <div className="text-center py-16">
-              <p className="text-xl text-[#6B5344]">No photos in this category yet</p>
+              <p className="text-xl text-[#6B5344]">{t('gallery.empty')}</p>
             </div>
           )}
         </div>
       </section>
-      
-      {/* Info Section */}
+
       <section className="py-16 bg-gradient-to-r from-[#8B4513] to-[#228B22]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl mb-6 text-[#FFFDD0]">Visit Our Farm</h2>
+            <h2 className="text-4xl mb-6 text-[#FFFDD0]">{t('gallery.visitTitle')}</h2>
             <p className="text-xl text-[#FAF3E0] mb-8">
-              Want to see our operations in person? We welcome visitors to tour our facilities 
-              and learn about our farming practices.
+              {t('gallery.visitDesc')}
             </p>
             <div className="bg-white/10 backdrop-blur-sm border-2 border-[#FFFDD0] rounded-lg p-6">
-              <p className="text-[#FFFDD0] mb-2">📍 Eastern Province, Kayonza District, Rukara Sector</p>
-              <p className="text-[#FFFDD0]">📞 Call 0788455886 to schedule a visit</p>
+              <p className="text-[#FFFDD0] mb-2">{t('gallery.visitAddress')}</p>
+              <p className="text-[#FFFDD0]">{t('gallery.visitCall')}</p>
             </div>
           </div>
         </div>

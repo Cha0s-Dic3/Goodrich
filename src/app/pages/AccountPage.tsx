@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, Mail, Phone, User, LogOut, Package } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -17,6 +18,7 @@ export function AccountPage() {
     orders,
     loadOrders
   } = useApp();
+  const { t } = useI18n();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -65,7 +67,7 @@ export function AccountPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.email.trim()) {
-      toast.error('Name and email are required');
+      toast.error(t('account.nameEmailRequired'));
       return;
     }
     setIsSaving(true);
@@ -76,9 +78,9 @@ export function AccountPage() {
         phone: formData.phone.trim(),
         avatarUrl: formData.avatarUrl.trim()
       });
-      toast.success('Profile updated');
+      toast.success(t('account.profileUpdated'));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to update profile');
+      toast.error(err?.message || t('account.profileUpdateFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -87,7 +89,7 @@ export function AccountPage() {
   const handleAvatarUpload = async (file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Please choose an image file');
+      toast.error(t('account.chooseImage'));
       return;
     }
     setIsUploadingAvatar(true);
@@ -95,9 +97,9 @@ export function AccountPage() {
       const avatarUrl = await uploadAvatar(file);
       setFormData((prev) => ({ ...prev, avatarUrl }));
       await updateUserProfile({ avatarUrl });
-      toast.success('Profile photo uploaded');
+      toast.success(t('account.photoUploaded'));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to upload profile photo');
+      toast.error(err?.message || t('account.photoUploadFailed'));
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -112,8 +114,8 @@ export function AccountPage() {
       <section className="py-12 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2">My Account</h1>
-            <p className="text-lg text-[#FAF3E0]">Manage your profile and keep your order history private.</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2">{t('account.title')}</h1>
+            <p className="text-lg text-[#FAF3E0]">{t('account.subtitle')}</p>
           </div>
         </div>
       </section>
@@ -136,7 +138,7 @@ export function AccountPage() {
                 </div>
                 <div>
                   <h2 className="text-2xl text-[#3D2817]">{authUser.name}</h2>
-                  <p className="text-sm text-[#6B5344]">Customer ID: {authUser.customerId}</p>
+                  <p className="text-sm text-[#6B5344]">{t('account.customerId')}: {authUser.customerId}</p>
                 </div>
               </div>
 
@@ -155,11 +157,11 @@ export function AccountPage() {
 
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div className="p-4 bg-[#F0EAD6] rounded-lg border border-[#D2B48C]">
-                  <p className="text-xs text-[#6B5344]">Total Orders</p>
+                  <p className="text-xs text-[#6B5344]">{t('account.totalOrders')}</p>
                   <p className="text-2xl text-[#3D2817]">{orders.length}</p>
                 </div>
                 <div className="p-4 bg-[#F0EAD6] rounded-lg border border-[#D2B48C]">
-                  <p className="text-xs text-[#6B5344]">Total Paid</p>
+                  <p className="text-xs text-[#6B5344]">{t('account.totalPaid')}</p>
                   <p className="text-2xl text-[#C41E3A]">{totalPaid.toLocaleString()} FRW</p>
                 </div>
               </div>
@@ -170,7 +172,7 @@ export function AccountPage() {
                   className="w-full bg-[#8B4513] hover:bg-[#A0522D] text-white"
                 >
                   <Package className="h-4 w-4 mr-2" />
-                  View Order History
+                  {t('account.viewOrderHistory')}
                 </Button>
                 <Button
                   onClick={userLogout}
@@ -178,7 +180,7 @@ export function AccountPage() {
                   className="w-full border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
-                  Logout
+                  {t('account.logout')}
                 </Button>
               </div>
             </Card>
@@ -186,11 +188,11 @@ export function AccountPage() {
             <Card className="p-6 bg-white border-2 border-[#D2B48C] lg:col-span-2">
               <h2 className="text-2xl text-[#3D2817] mb-6 flex items-center gap-2">
                 <User className="h-5 w-5 text-[#C41E3A]" />
-                Profile Details
+                {t('account.profileDetails')}
               </h2>
               <form onSubmit={handleSave} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Full Name</label>
+                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">{t('account.fullName')}</label>
                   <Input
                     name="name"
                     value={formData.name}
@@ -200,7 +202,7 @@ export function AccountPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Email Address</label>
+                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">{t('account.emailAddress')}</label>
                   <Input
                     name="email"
                     type="email"
@@ -211,7 +213,7 @@ export function AccountPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Phone Number</label>
+                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">{t('account.phoneNumber')}</label>
                   <Input
                     name="phone"
                     value={formData.phone}
@@ -221,7 +223,7 @@ export function AccountPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">Profile Photo</label>
+                  <label className="block text-sm font-semibold text-[#3D2817] mb-2">{t('account.profilePhoto')}</label>
                   <div className="flex items-center gap-3">
                     <Input
                       type="file"
@@ -234,7 +236,7 @@ export function AccountPage() {
                     </div>
                   </div>
                   {isUploadingAvatar && (
-                    <p className="text-xs text-[#6B5344] mt-2">Uploading photo...</p>
+                    <p className="text-xs text-[#6B5344] mt-2">{t('account.uploadingPhoto')}</p>
                   )}
                 </div>
 
@@ -244,7 +246,7 @@ export function AccountPage() {
                     disabled={isSaving}
                     className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
                   >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
+                    {isSaving ? t('account.saving') : t('account.saveChanges')}
                   </Button>
                 </div>
               </form>

@@ -31,6 +31,15 @@ Required:
 - `JWT_SECRET`
 - `PORT` (defaults to `5174`)
 - `NODE_ENV` (`development` or `production`)
+- `APP_BASE_URL` (e.g. `http://localhost:5173` or your production URL)
+
+SMTP (required for password reset emails):
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM`
 
 Payment (Paypack):
 
@@ -56,6 +65,30 @@ npm start
 ```
 
 In production mode, backend serves the built frontend (`dist`) and SPA routes.
+
+### Render (single service)
+
+Use one Web Service for both frontend and backend.
+
+Build command:
+
+```bash
+npm install && npm run build
+```
+
+Start command:
+
+```bash
+npm start
+```
+
+Render environment variables (minimum):
+
+- `NODE_ENV=production`
+- `JWT_SECRET=<strong-secret>`
+- `APP_BASE_URL=https://<your-render-url>`
+
+If you want password reset emails, also set SMTP variables listed above.
 
 ### Firebase Storage deployment (single app)
 

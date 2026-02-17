@@ -1,8 +1,10 @@
 import { MapPin, Phone, Mail, Facebook, Twitter, Instagram } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 
 export function Footer() {
   const { setCurrentPage } = useApp();
+  const { t } = useI18n();
 
   return (
     <footer className="bg-[#8B4513] text-[#FFFDD0] border-t-4 border-[#FFD700]">
@@ -10,9 +12,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About Section */}
           <div>
-            <h3 className="text-xl mb-4 text-[#FFD700]">Goodrich Farm</h3>
+            <h3 className="text-xl mb-4 text-[#FFD700]">{t('footer.brand')}</h3>
             <p className="text-[#FAF3E0] text-sm mb-4">
-              Quality chicken farming with responsible practices. Fresh eggs delivered to your doorstep.
+              {t('footer.about')}
             </p>
             <div className="flex gap-3">
               <a href="#" className="p-2 bg-[#A0522D] rounded-full hover:bg-[#C41E3A] transition-colors">
@@ -29,14 +31,14 @@ export function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-xl mb-4 text-[#FFD700]">Quick Links</h3>
+            <h3 className="text-xl mb-4 text-[#FFD700]">{t('footer.quickLinks')}</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <button
                   onClick={() => setCurrentPage('about')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  About Us
+                  {t('footer.links.about')}
                 </button>
               </li>
               <li>
@@ -44,7 +46,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('practices')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  Farm Practices
+                  {t('footer.links.practices')}
                 </button>
               </li>
               <li>
@@ -52,7 +54,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('shop')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  Shop Products
+                  {t('footer.links.shop')}
                 </button>
               </li>
               <li>
@@ -60,7 +62,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('gallery')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  Gallery
+                  {t('footer.links.gallery')}
                 </button>
               </li>
               <li>
@@ -68,7 +70,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('contact')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  Contact Us
+                  {t('footer.links.contact')}
                 </button>
               </li>
               <li>
@@ -76,7 +78,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('announcements')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  Announcements
+                  {t('footer.links.announcements')}
                 </button>
               </li>
               <li>
@@ -84,7 +86,7 @@ export function Footer() {
                   onClick={() => setCurrentPage('orders')}
                   className="text-[#FAF3E0] hover:text-[#FFD700] transition-colors"
                 >
-                  My Orders
+                  {t('footer.links.orders')}
                 </button>
               </li>
             </ul>
@@ -92,13 +94,13 @@ export function Footer() {
 
           {/* Contact Info */}
           <div>
-            <h3 className="text-xl mb-4 text-[#FFD700]">Contact Us</h3>
+            <h3 className="text-xl mb-4 text-[#FFD700]">{t('footer.contactTitle')}</h3>
             <ul className="space-y-3 text-sm">
               <li className="flex items-start gap-2">
                 <MapPin className="h-5 w-5 text-[#FFD700] flex-shrink-0 mt-0.5" />
                 <span className="text-[#FAF3E0]">
-                  Eastern Province, Kayonza District<br />
-                  Rukara Sector, Kawangire Cell
+                  {t('footer.addressLine1')}<br />
+                  {t('footer.addressLine2')}
                 </span>
               </li>
               <li className="flex items-center gap-2">
@@ -116,13 +118,13 @@ export function Footer() {
 
           {/* Delivery Zones */}
           <div>
-            <h3 className="text-xl mb-4 text-[#FFD700]">Delivery Zones</h3>
+            <h3 className="text-xl mb-4 text-[#FFD700]">{t('footer.deliveryTitle')}</h3>
             <ul className="space-y-2 text-sm text-[#FAF3E0]">
-              <li>* Local (10km): 3,000 FRW</li>
-              <li>* Regional (51-60km): 10,000 FRW</li>
-              <li>* National: Calculated</li>
+              <li>* {t('footer.delivery.local')}</li>
+              <li>* {t('footer.delivery.regional')}</li>
+              <li>* {t('footer.delivery.national')}</li>
               <li className="pt-2">
-                <span className="text-[#FFD700]">Minimum Order:</span> 4,500 FRW
+                <span className="text-[#FFD700]">{t('footer.delivery.minimumLabel')}</span> {t('footer.delivery.minimumValue')}
               </li>
             </ul>
           </div>
@@ -130,7 +132,7 @@ export function Footer() {
 
         <div className="border-t border-[#A0522D] mt-8 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-[#FAF3E0]">
-            Copyright 2026 Goodrich Chicken Farm. Farmer: HABAKURAMA Jean Dieu. All rights reserved.
+            {t('footer.copyright')}
           </p>
         </div>
       </div>

@@ -8,7 +8,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 
 export function InventoryManagement() {
-  const { products, updateProduct } = useApp();
+  const { products, updateProduct, language } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Product>>({});
   
@@ -35,6 +35,9 @@ export function InventoryManagement() {
   
   return (
     <div className="space-y-6">
+      <p className="text-sm text-[#6B5344]">
+        Editing product translations for: <span className="font-semibold uppercase">{language}</span>
+      </p>
       <div className="flex items-center justify-between">
         <h2 className="text-3xl text-[#3D2817]">Inventory Management</h2>
       </div>

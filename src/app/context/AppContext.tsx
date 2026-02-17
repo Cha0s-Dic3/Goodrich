@@ -92,6 +92,9 @@ export interface PendingPayment {
   id: string;
   ref: string;
   status: string;
+  method?: string;
+  receiverName?: string;
+  receiverPhone?: string;
   amount: number;
   subtotal: number;
   deliveryFee: number;
@@ -102,9 +105,14 @@ export interface PendingPayment {
   createdAt: string;
   updatedAt?: string;
   failureReason?: string;
+  expiresAt?: number;
+  approvedAt?: string;
+  cancelledAt?: string;
   retriedFrom?: string;
   retriedTo?: string;
 }
+
+export type SupportedLanguage = 'en' | 'rw' | 'sw' | 'fr';
 
 interface AppContextType {
   // Products
@@ -179,6 +187,10 @@ interface AppContextType {
   // Current Page
   currentPage: string;
   setCurrentPage: (page: string) => void;
+
+  // Language
+  language: SupportedLanguage;
+  setLanguage: (language: SupportedLanguage) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -243,6 +255,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const [currentPageState, setCurrentPageState] = useState('home');
+  const [language, setLanguageState] = useState<SupportedLanguage>(() => {
+    const saved = localStorage.getItem('language');
+    if (saved === 'en' || saved === 'rw' || saved === 'sw' || saved === 'fr') {
+      return saved;
+    }
+    return 'en';
+  });
 
   // Persist data
   useEffect(() => {
@@ -276,14 +295,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [authUser]);
 
   useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  useEffect(() => {
     refreshProducts();
     refreshAnnouncements();
     loadGallery();
-  }, []);
+  }, [language]);
+
+  useEffect(() => {
+    // Keep cart item labels synced with currently selected language.
+    setCart(prev =>
+      prev.map(item => {
+        const latest = products.find(p => p.id === item.product.id);
+        return latest ? { ...item, product: latest } : item;
+      })
+    );
+  }, [products]);
 
   const refreshProducts = async () => {
     try {
-      const data = await fetchJson('/api/products');
+      const data = await fetchJson(`/api/products?lang=${language}`);
       setProducts(data.products || []);
     } catch (err) {
       setProducts([]);
@@ -294,14 +327,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const data = await fetchJson(`/api/admin/products/${productId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
+      body: JSON.stringify({ ...updates, lang: language })
     });
     setProducts(prev => prev.map(p => (p.id === productId ? data.product : p)));
   };
 
   const refreshAnnouncements = async () => {
     try {
-      const data = await fetchJson('/api/announcements');
+      const data = await fetchJson(`/api/announcements?lang=${language}`);
       setAnnouncements(data.announcements || []);
     } catch (err) {
       setAnnouncements([]);
@@ -312,7 +345,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const data = await fetchJson('/api/admin/announcements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(announcement)
+      body: JSON.stringify({ ...announcement, lang: language })
     });
     setAnnouncements(prev => [data.announcement, ...prev]);
   };
@@ -321,7 +354,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const data = await fetchJson(`/api/admin/announcements/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedData)
+      body: JSON.stringify({ ...updatedData, lang: language })
     });
     setAnnouncements(prev => prev.map(a => (a.id === id ? data.announcement : a)));
   };
@@ -333,7 +366,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadGallery = async () => {
     try {
-      const data = await fetchJson('/api/gallery');
+      const data = await fetchJson(`/api/gallery?lang=${language}`);
       setGallery(data.gallery || []);
     } catch (err) {
       setGallery([]);
@@ -344,7 +377,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const data = await fetchJson('/api/admin/gallery', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item)
+      body: JSON.stringify({ ...item, lang: language })
     });
     setGallery(prev => [data.item, ...prev]);
   };
@@ -357,7 +390,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const data = await fetchJson(`/api/admin/gallery/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item)
+      body: JSON.stringify({ ...item, lang: language })
     });
     setGallery(prev => prev.map(entry => (entry.id === id ? data.item : entry)));
   };
@@ -369,7 +402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadMessages = async () => {
     try {
-      const data = await fetchJson('/api/admin/messages');
+      const data = await fetchJson('/api/admin/messages?limit=1000');
       setMessages(data.messages || []);
     } catch (err) {
       setMessages([]);
@@ -404,7 +437,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const data = await fetchJson(scope === 'admin' ? '/api/admin/orders' : '/api/orders/my', {
+      const data = await fetchJson(scope === 'admin' ? '/api/admin/orders?limit=1000' : '/api/orders/my', {
         headers: authToken && scope === 'user' ? { Authorization: `Bearer ${authToken}` } : undefined
       });
       setOrders(data.orders || []);
@@ -420,7 +453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       const data = await fetchJson(
-        scope === 'admin' ? '/api/admin/payments' : '/api/payments/my',
+        scope === 'admin' ? '/api/admin/payments?limit=1000' : '/api/payments/my',
         {
           headers: authToken && scope === 'user' ? { Authorization: `Bearer ${authToken}` } : undefined
         }
@@ -481,7 +514,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadCustomers = async () => {
     try {
-      const data = await fetchJson('/api/admin/customers');
+      const data = await fetchJson('/api/admin/customers?limit=1000');
       setCustomers(data.customers || []);
     } catch (err) {
       setCustomers([]);
@@ -601,6 +634,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setLanguage = (nextLanguage: SupportedLanguage) => {
+    setLanguageState(nextLanguage);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -652,7 +689,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         uploadAvatar,
         updateUserProfile,
         currentPage: currentPageState,
-        setCurrentPage
+        setCurrentPage,
+        language,
+        setLanguage
       }}
     >
       {children}

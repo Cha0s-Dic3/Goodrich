@@ -5,33 +5,41 @@ import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 
 export function ResetPasswordPage() {
   const { setCurrentPage } = useApp();
+  const { t } = useI18n();
+  const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const savedToken = sessionStorage.getItem('resetToken');
-    if (savedToken) {
-      setToken(savedToken);
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam) {
+      setToken(tokenParam);
+    }
+    const savedEmail = sessionStorage.getItem('resetEmail');
+    if (savedEmail) {
+      setEmail(savedEmail);
     }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !password || !confirmPassword) {
-      toast.error('Please fill in all fields');
+    if (!email || !token || !password || !confirmPassword) {
+      toast.error(t('reset.fillAll'));
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error(t('reset.passwordMismatch'));
       return;
     }
     if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error(t('reset.passwordLength'));
       return;
     }
     if (isSubmitting) return;
@@ -41,17 +49,17 @@ export function ResetPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password })
+        body: JSON.stringify({ email, token, password })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to reset password');
+        throw new Error(data.error || t('reset.failed'));
       }
-      sessionStorage.removeItem('resetToken');
-      toast.success('Password updated. Please sign in.');
+      sessionStorage.removeItem('resetEmail');
+      toast.success(t('reset.success'));
       setCurrentPage('login');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to reset password');
+      toast.error(err?.message || t('reset.failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -62,8 +70,8 @@ export function ResetPasswordPage() {
       <section className="py-12 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">Reset Password</h1>
-            <p className="text-lg text-[#FAF3E0]">Enter your reset token and new password</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">{t('reset.title')}</h1>
+            <p className="text-lg text-[#FAF3E0]">{t('reset.subtitle')}</p>
           </div>
         </div>
       </section>
@@ -74,14 +82,29 @@ export function ResetPasswordPage() {
             <Card className="p-8 bg-white border-2 border-[#D2B48C] shadow-lg">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
+                  <label htmlFor="email" className="block text-sm font-semibold text-[#3D2817] mb-2">
+                    {t('reset.emailAddress')}
+                  </label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder={t('reset.emailPlaceholder')}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="border-[#D2B48C] focus:border-[#FFD700]"
+                  />
+                </div>
+
+                <div>
                   <label htmlFor="token" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    Reset Token
+                    {t('reset.resetCode')}
                   </label>
                   <Input
                     id="token"
                     name="token"
                     type="text"
-                    placeholder="Paste reset token"
+                    placeholder={t('reset.resetCodePlaceholder')}
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     className="border-[#D2B48C] focus:border-[#FFD700]"
@@ -90,7 +113,7 @@ export function ResetPasswordPage() {
 
                 <div>
                   <label htmlFor="password" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    New Password
+                    {t('reset.newPassword')}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -98,7 +121,7 @@ export function ResetPasswordPage() {
                       id="password"
                       name="password"
                       type="password"
-                      placeholder="Enter new password"
+                      placeholder={t('reset.newPasswordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -108,7 +131,7 @@ export function ResetPasswordPage() {
 
                 <div>
                   <label htmlFor="confirmPassword" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    Confirm Password
+                    {t('reset.confirmPassword')}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -116,7 +139,7 @@ export function ResetPasswordPage() {
                       id="confirmPassword"
                       name="confirmPassword"
                       type="password"
-                      placeholder="Confirm new password"
+                      placeholder={t('reset.confirmPasswordPlaceholder')}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -130,7 +153,7 @@ export function ResetPasswordPage() {
                   className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white font-semibold"
                   size="lg"
                 >
-                  {isSubmitting ? 'Please wait...' : 'Reset Password'}
+                  {isSubmitting ? t('reset.pleaseWait') : t('reset.resetPassword')}
                 </Button>
 
                 <div className="text-center pt-4 border-t border-[#D2B48C]">
@@ -139,7 +162,7 @@ export function ResetPasswordPage() {
                     onClick={() => setCurrentPage('login')}
                     className="text-sm font-semibold text-[#C41E3A] hover:text-[#A0522D] transition-colors"
                   >
-                    Back to Sign In
+                    {t('reset.backToSignIn')}
                   </button>
                 </div>
               </form>

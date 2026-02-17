@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import logoUrl from '../Goodrich logo.png';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { SplashScreen } from './components/SplashScreen';
 import { HomePage } from './pages/HomePage';
 import { AboutPage } from './pages/AboutPage';
 import { FarmPracticesPage } from './pages/FarmPracticesPage';
@@ -22,7 +23,20 @@ import { AccountPage } from './pages/AccountPage';
 import { Toaster } from './components/ui/sonner';
 
 function AppContent() {
-  const { currentPage, setCurrentPage } = useApp();
+  const { currentPage, setCurrentPage, language } = useApp();
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setShowSplash(false);
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     const size = 128;
@@ -112,14 +126,20 @@ function AppContent() {
         return <HomePage />;
     }
   };
-  
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-1">
-        {renderPage()}
-      </main>
-      <Footer />
+      {showSplash ? (
+        <SplashScreen />
+      ) : (
+        <>
+          <Header />
+          <main className="flex-1">
+            {renderPage()}
+          </main>
+          <Footer />
+        </>
+      )}
       <Toaster />
     </div>
   );

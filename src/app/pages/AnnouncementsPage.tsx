@@ -1,16 +1,26 @@
 import { Megaphone, Calendar, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 
 export function AnnouncementsPage() {
-  const { announcements, setCurrentPage } = useApp();
+  const { announcements, setCurrentPage, language } = useApp();
+  const { t } = useI18n();
+
+  const localeMap = {
+    en: 'en-US',
+    rw: 'rw-RW',
+    sw: 'sw-TZ',
+    fr: 'fr-FR'
+  } as const;
+  const locale = localeMap[language];
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+      date: date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' }),
+      time: date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: true })
     };
   };
 
@@ -22,10 +32,10 @@ export function AnnouncementsPage() {
           <div className="max-w-3xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-2 flex items-center gap-3">
               <Megaphone className="h-10 w-10" />
-              Latest Announcements
+              {t('announcements.title')}
             </h1>
             <p className="text-lg text-[#FAF3E0]">
-              Stay updated with our latest news and updates from Goodrich Farm
+              {t('announcements.subtitle')}
             </p>
           </div>
         </div>
@@ -37,9 +47,9 @@ export function AnnouncementsPage() {
           {announcements.length === 0 ? (
             <Card className="p-12 bg-white border-2 border-[#D2B48C] text-center">
               <Megaphone className="h-20 w-20 text-[#D2B48C] mx-auto mb-6" />
-              <h2 className="text-3xl mb-2 text-[#3D2817]">No Announcements Yet</h2>
+              <h2 className="text-3xl mb-2 text-[#3D2817]">{t('announcements.emptyTitle')}</h2>
               <p className="text-[#6B5344] mb-8">
-                Check back soon for updates from Goodrich Farm
+                {t('announcements.emptyDesc')}
               </p>
             </Card>
           ) : (
@@ -59,19 +69,19 @@ export function AnnouncementsPage() {
                         <div className="flex flex-wrap items-center gap-6 text-sm text-[#6B5344]">
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-[#C41E3A]" />
-                            <span><strong>By:</strong> {announcement.author}</span>
+                            <span><strong>{t('announcements.by')}:</strong> {announcement.author}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-[#C41E3A]" />
-                            <span><strong>Date:</strong> {date}</span>
+                            <span><strong>{t('announcements.date')}:</strong> {date}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span><strong>Time:</strong> {time}</span>
+                            <span><strong>{t('announcements.time')}:</strong> {time}</span>
                           </div>
                         </div>
                         {announcement.updatedAt && (
                           <p className="text-xs text-[#8B5A3C] mt-2 italic">
-                            Last updated: {new Date(announcement.updatedAt).toLocaleDateString()} at {new Date(announcement.updatedAt).toLocaleTimeString()}
+                            {t('announcements.lastUpdated')}: {new Date(announcement.updatedAt).toLocaleDateString(locale)} {t('announcements.at')} {new Date(announcement.updatedAt).toLocaleTimeString(locale)}
                           </p>
                         )}
                       </div>
@@ -94,7 +104,7 @@ export function AnnouncementsPage() {
               className="bg-[#8B4513] hover:bg-[#A0522D] text-white"
               size="lg"
             >
-              Back to Home
+              {t('announcements.backHome')}
             </Button>
           </div>
         </div>

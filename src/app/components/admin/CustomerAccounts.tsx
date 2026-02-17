@@ -17,7 +17,7 @@ export function CustomerAccounts() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
 
   useEffect(() => {
-    fetch('/api/admin/accounts')
+    fetch('/api/admin/accounts?limit=1000')
       .then((res) => res.json())
       .then((data) => setAccounts(data.accounts || []))
       .catch(() => setAccounts([]));
@@ -138,3 +138,4 @@ export function CustomerAccounts() {
     </div>
   );
 }
+

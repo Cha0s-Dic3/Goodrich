@@ -1,11 +1,13 @@
 import { Trash2, Plus, Minus, ShoppingBag, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { toast } from 'sonner';
 
 export function CartPage() {
   const { cart, removeFromCart, updateCartQuantity, cartTotal, setCurrentPage, isUserLoggedIn } = useApp();
+  const { t } = useI18n();
   
   const deliveryFee = 3000; // Default local delivery fee
   const totalAmount = cartTotal + deliveryFee;
@@ -17,7 +19,7 @@ export function CartPage() {
     
     const newQuantity = item.quantity + delta;
     if (newQuantity > item.product.stock) {
-      toast.error('Not enough stock available');
+      toast.error(t('cart.notEnoughStock'));
       return;
     }
     updateCartQuantity(productId, newQuantity);
@@ -25,12 +27,12 @@ export function CartPage() {
   
   const handleProceedToCheckout = () => {
     if (cart.length === 0) {
-      toast.error('Your cart is empty');
+      toast.error(t('cart.empty'));
       return;
     }
     
     if (cartTotal < minimumOrder) {
-      toast.error(`Minimum order is ${minimumOrder.toLocaleString()} FRW`);
+      toast.error(t('cart.minimumOrderError', { amount: minimumOrder.toLocaleString() }));
       return;
     }
     
@@ -48,16 +50,16 @@ export function CartPage() {
       <div className="min-h-screen bg-[#FFFDD0] flex items-center justify-center py-20">
         <Card className="p-12 max-w-md text-center bg-white border-2 border-[#D2B48C]">
           <ShoppingBag className="h-20 w-20 text-[#D2B48C] mx-auto mb-6" />
-          <h2 className="text-3xl mb-4 text-[#3D2817]">Your Cart is Empty</h2>
+          <h2 className="text-3xl mb-4 text-[#3D2817]">{t('cart.empty')}</h2>
           <p className="text-[#6B5344] mb-8">
-            Start shopping to add fresh eggs to your cart!
+            {t('cart.emptyDesc')}
           </p>
           <Button
             onClick={() => setCurrentPage('shop')}
             className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
             size="lg"
           >
-            Browse Products
+            {t('cart.browseProducts')}
           </Button>
         </Card>
       </div>
@@ -70,9 +72,9 @@ export function CartPage() {
       <section className="py-16 bg-gradient-to-br from-[#8B4513] to-[#A0522D]">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl mb-4 text-[#FFFDD0]">Shopping Cart</h1>
+            <h1 className="text-5xl mb-4 text-[#FFFDD0]">{t('cart.title')}</h1>
             <p className="text-xl text-[#FAF3E0]">
-              Review your items and proceed to checkout
+              {t('cart.subtitle')}
             </p>
           </div>
         </div>
@@ -82,7 +84,7 @@ export function CartPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-2xl mb-4 text-[#3D2817]">Cart Items ({cart.length})</h2>
+            <h2 className="text-2xl mb-4 text-[#3D2817]">{t('cart.itemsTitle')} ({cart.length})</h2>
             
             {cart.map(item => (
               <Card key={item.product.id} className="p-6 bg-white border-2 border-[#D2B48C]">
@@ -139,7 +141,7 @@ export function CartPage() {
                       className="text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
-                      Remove
+                      {t('cart.remove')}
                     </Button>
                   </div>
                 </div>
@@ -150,19 +152,19 @@ export function CartPage() {
           {/* Order Summary */}
           <div>
             <Card className="p-6 bg-white border-2 border-[#D2B48C] sticky top-24">
-              <h2 className="text-2xl mb-6 text-[#3D2817]">Order Summary</h2>
+              <h2 className="text-2xl mb-6 text-[#3D2817]">{t('cart.summaryTitle')}</h2>
               
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-[#6B5344]">
-                  <span>Subtotal</span>
+                  <span>{t('cart.subtotal')}</span>
                   <span>{cartTotal.toLocaleString()} FRW</span>
                 </div>
                 <div className="flex justify-between text-[#6B5344]">
-                  <span>Delivery Fee (Local)</span>
+                  <span>{t('cart.deliveryFeeLocal')}</span>
                   <span>{deliveryFee.toLocaleString()} FRW</span>
                 </div>
                 <div className="border-t-2 border-[#D2B48C] pt-3 flex justify-between text-xl text-[#3D2817]">
-                  <span>Total</span>
+                  <span>{t('cart.total')}</span>
                   <span className="text-[#C41E3A]">{totalAmount.toLocaleString()} FRW</span>
                 </div>
               </div>
@@ -170,7 +172,7 @@ export function CartPage() {
               {cartTotal < minimumOrder && (
                 <div className="bg-[#FF8C00]/10 border border-[#FF8C00] rounded-lg p-3 mb-4">
                   <p className="text-sm text-[#3D2817]">
-                    Add {(minimumOrder - cartTotal).toLocaleString()} FRW more to meet minimum order
+                    {t('cart.addMore', { amount: (minimumOrder - cartTotal).toLocaleString() })}
                   </p>
                 </div>
               )}
@@ -183,14 +185,14 @@ export function CartPage() {
                   disabled={cartTotal < minimumOrder}
                 >
                   <CheckCircle className="mr-2 h-5 w-5" />
-                  Proceed to Checkout
+                  {t('cart.proceed')}
                 </Button>
                 <Button
                   onClick={() => setCurrentPage('shop')}
                   variant="outline"
                   className="w-full border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513] hover:text-white"
                 >
-                  Continue Shopping
+                  {t('cart.continueShopping')}
                 </Button>
               </>
             </Card>

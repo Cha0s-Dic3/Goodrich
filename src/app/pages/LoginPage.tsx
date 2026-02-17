@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 
 export function LoginPage() {
   const { setCurrentPage, userLogin, isUserLoggedIn, isAdmin } = useApp();
+  const { t } = useI18n();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,22 +48,22 @@ export function LoginPage() {
 
     if (isSubmitting) return;
     if (isAdmin) {
-      toast.error('Admin is logged in. Log out admin first.');
+      toast.error(t('login.adminLoggedIn'));
       return;
     }
 
     if (isLogin) {
       if (!formData.email || !formData.password) {
-        toast.error('Please fill in all fields');
+        toast.error(t('login.fillAll'));
         return;
       }
     } else {
       if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
-        toast.error('Please fill in all fields');
+        toast.error(t('login.fillAll'));
         return;
       }
       if (formData.password !== formData.confirmPassword) {
-        toast.error('Passwords do not match');
+        toast.error(t('login.passwordMismatch'));
         return;
       }
     }
@@ -80,17 +82,17 @@ export function LoginPage() {
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Authentication failed');
+          throw new Error(data.error || t('login.authFailed'));
         }
         return res.json();
       })
       .then((data) => {
         userLogin(data.token, data.user);
-        toast.success(isLogin ? 'Login successful!' : 'Account created successfully!');
+        toast.success(isLogin ? t('login.success') : t('login.createdSuccess'));
         setCurrentPage(resolvePostLoginRedirect());
       })
       .catch((err) => {
-        toast.error(err.message || 'Authentication failed');
+        toast.error(err.message || t('login.authFailed'));
       })
       .finally(() => setIsSubmitting(false));
   };
@@ -102,12 +104,12 @@ export function LoginPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin ? t('login.welcomeBack') : t('login.createAccount')}
             </h1>
             <p className="text-lg text-[#FAF3E0]">
               {isLogin
-                ? 'Sign in to your account to continue shopping'
-                : 'Join us for fresh eggs delivered to your doorstep'}
+                ? t('login.signInDesc')
+                : t('login.createDesc')}
             </p>
           </div>
         </div>
@@ -123,7 +125,7 @@ export function LoginPage() {
                 {!isLogin && (
                   <div>
                     <label htmlFor="name" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                      Full Name
+                      {t('login.fullName')}
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -131,7 +133,7 @@ export function LoginPage() {
                         id="name"
                         name="name"
                         type="text"
-                        placeholder="Your full name"
+                        placeholder={t('login.fullNamePlaceholder')}
                         value={formData.name}
                         onChange={handleInputChange}
                         className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -143,7 +145,7 @@ export function LoginPage() {
                 {/* Email Field */}
                 <div>
                   <label htmlFor="email" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    Email Address
+                    {t('login.emailAddress')}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -151,7 +153,7 @@ export function LoginPage() {
                       id="email"
                       name="email"
                       type="email"
-                      placeholder="your@email.com"
+                      placeholder={t('login.emailPlaceholder')}
                       value={formData.email}
                       onChange={handleInputChange}
                       className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -162,7 +164,7 @@ export function LoginPage() {
                 {/* Password Field */}
                 <div>
                   <label htmlFor="password" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    Password
+                    {t('login.password')}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -170,7 +172,7 @@ export function LoginPage() {
                       id="password"
                       name="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Enter your password"
+                      placeholder={t('login.passwordPlaceholder')}
                       value={formData.password}
                       onChange={handleInputChange}
                       className="pl-10 pr-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -193,7 +195,7 @@ export function LoginPage() {
                 {!isLogin && (
                   <div>
                     <label htmlFor="confirmPassword" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                      Confirm Password
+                      {t('login.confirmPassword')}
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -201,7 +203,7 @@ export function LoginPage() {
                         id="confirmPassword"
                         name="confirmPassword"
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="Confirm your password"
+                        placeholder={t('login.confirmPasswordPlaceholder')}
                         value={formData.confirmPassword}
                         onChange={handleInputChange}
                         className="pl-10 pr-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -218,7 +220,7 @@ export function LoginPage() {
                       onClick={() => setCurrentPage('forgot-password')}
                       className="text-sm text-[#C41E3A] hover:text-[#A0522D] transition-colors"
                     >
-                      Forgot Password?
+                      {t('login.forgotPassword')}
                     </button>
                   </div>
                 )}
@@ -230,13 +232,13 @@ export function LoginPage() {
                   className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white font-semibold"
                   size="lg"
                 >
-                  {isSubmitting ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+                  {isSubmitting ? t('login.pleaseWait') : (isLogin ? t('login.signIn') : t('login.createAccount'))}
                 </Button>
 
                 {/* Toggle Between Login and Signup */}
                 <div className="text-center pt-4 border-t border-[#D2B48C]">
                   <p className="text-sm text-[#6B5344] mb-2">
-                    {isLogin ? "Don't have an account?" : 'Already have an account?'}
+                    {isLogin ? t('login.noAccount') : t('login.haveAccount')}
                   </p>
                   <button
                     type="button"
@@ -246,7 +248,7 @@ export function LoginPage() {
                     }}
                     className="text-sm font-semibold text-[#C41E3A] hover:text-[#A0522D] transition-colors"
                   >
-                    {isLogin ? 'Create Account' : 'Sign In'}
+                    {isLogin ? t('login.createAccount') : t('login.signIn')}
                   </button>
                 </div>
               </form>
@@ -257,7 +259,7 @@ export function LoginPage() {
                   onClick={() => setCurrentPage('shop')}
                   className="text-sm text-[#A0522D] hover:text-[#8B4513] transition-colors"
                 >
-                  Continue Shopping Instead
+                  {t('login.continueShopping')}
                 </button>
               </div>
             </Card>

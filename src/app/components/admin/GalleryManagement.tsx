@@ -16,7 +16,7 @@ const categories = [
 ];
 
 export function GalleryManagement() {
-  const { gallery, loadGallery, addGalleryItem, updateGalleryItem, deleteGalleryItem, uploadGalleryImage } = useApp();
+  const { gallery, loadGallery, addGalleryItem, updateGalleryItem, deleteGalleryItem, uploadGalleryImage, language } = useApp();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -115,6 +115,9 @@ export function GalleryManagement() {
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-[#6B5344]">
+        Editing gallery translations for: <span className="font-semibold uppercase">{language}</span>
+      </p>
       <div className="flex items-center justify-between">
         <h2 className="text-3xl text-[#3D2817]">Gallery Management</h2>
         <Button onClick={() => setShowNewForm(true)} className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white">
