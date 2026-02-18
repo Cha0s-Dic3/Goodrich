@@ -1,0 +1,24 @@
+[
+  {
+    "id": "CUST-001",
+    "name": "mupenzi cedrick",
+    "phone": "0780129985",
+    "email": "mupenzicedrick58@gmail.com",
+    "addresses": [
+      "Kigali\nApt"
+    ],
+    "totalOrders": 1,
+    "totalSpent": 9500,
+    "joinedDate": "2026-02-10"
+  },
+  {
+    "id": "CUST-002",
+    "name": "ISHEMA Christian",
+    "phone": "",
+    "email": "ishemachristian@gmail.com",
+    "addresses": [],
+    "totalOrders": 0,
+    "totalSpent": 0,
+    "joinedDate": "2026-02-10"
+  }
+]

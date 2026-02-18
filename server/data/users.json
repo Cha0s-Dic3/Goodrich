@@ -1,0 +1,22 @@
+[
+  {
+    "id": "USR-001",
+    "name": "mupenzi cedrick",
+    "email": "mupenzicedrick58@gmail.com",
+    "passwordHash": "$2a$10$fkLlaq9O3n5AFLwhYzKaYuJo9AjQiW6XtT8MHibcrBKcA6P3S1IDi",
+    "customerId": "CUST-001",
+    "createdAt": "2026-02-10T09:57:30.587Z",
+    "phone": "0780129985",
+    "avatarUrl": "/uploads/avatars/1770901682345-222490647.jpg"
+  },
+  {
+    "id": "USR-002",
+    "name": "ISHEMA Christian",
+    "email": "ishemachristian@gmail.com",
+    "passwordHash": "$2a$10$eyVr/pBKDf24N/BlApGAFurGK3rV/bT5/AiMPBWzW8tU0TSIs6Cwa",
+    "customerId": "CUST-002",
+    "createdAt": "2026-02-10T13:18:18.153Z",
+    "phone": "",
+    "avatarUrl": ""
+  }
+]

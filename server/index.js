@@ -12,6 +12,7 @@ import nodemailer from 'nodemailer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'data.json');
+const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DIST_PATH = path.join(__dirname, '../dist');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
@@ -21,9 +22,11 @@ const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
 const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
 const FIREBASE_PRIVATE_KEY = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || '';
+const FIREBASE_USE_DB = String(process.env.FIREBASE_USE_DB || '').toLowerCase() === 'true';
 const USE_FIREBASE_STORAGE = Boolean(
   FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY && FIREBASE_STORAGE_BUCKET
 );
+const USE_FIREBASE_DB = Boolean(FIREBASE_USE_DB && FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY);
 const PAYPACK_CLIENT_ID = process.env.PAYPACK_CLIENT_ID || '';
 const PAYPACK_CLIENT_SECRET = process.env.PAYPACK_CLIENT_SECRET || '';
 const PAYPACK_WEBHOOK_SECRET = process.env.PAYPACK_WEBHOOK_SECRET || '';
@@ -66,6 +69,7 @@ const FIREBASE_GCS_URL_PREFIX = FIREBASE_STORAGE_BUCKET
   ? `https://storage.googleapis.com/${FIREBASE_STORAGE_BUCKET}/`
   : '';
 let firebaseBucketCache = null;
+let firebaseFirestoreCache = null;
 let firebaseImportAttempted = false;
 let paypackClientCache = null;
 let paypackImportAttempted = false;
@@ -91,6 +95,32 @@ const getFirebaseBucket = async () => {
   } catch (err) {
     if (!firebaseImportAttempted) {
       console.error('Firebase Storage package/config missing. Falling back to local uploads.');
+      firebaseImportAttempted = true;
+    }
+    return null;
+  }
+};
+
+const getFirebaseFirestore = async () => {
+  if (!USE_FIREBASE_DB) return null;
+  if (firebaseFirestoreCache) return firebaseFirestoreCache;
+  try {
+    const admin = (await import('firebase-admin')).default;
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: FIREBASE_PROJECT_ID,
+          clientEmail: FIREBASE_CLIENT_EMAIL,
+          privateKey: FIREBASE_PRIVATE_KEY
+        }),
+        storageBucket: FIREBASE_STORAGE_BUCKET || undefined
+      });
+    }
+    firebaseFirestoreCache = admin.firestore();
+    return firebaseFirestoreCache;
+  } catch (err) {
+    if (!firebaseImportAttempted) {
+      console.error('Firebase Firestore package/config missing. Falling back to file data store.');
       firebaseImportAttempted = true;
     }
     return null;
@@ -244,6 +274,18 @@ const emptyData = () => ({
   gallery: []
 });
 
+const DATA_PARTS = [
+  'users',
+  'customers',
+  'products',
+  'orders',
+  'pendingPayments',
+  'passwordResets',
+  'announcements',
+  'messages',
+  'gallery'
+];
+
 const normalizeData = (data) => ({
   ...emptyData(),
   ...data,
@@ -258,17 +300,121 @@ const normalizeData = (data) => ({
   gallery: Array.isArray(data?.gallery) ? data.gallery : []
 });
 
-const loadData = async () => {
+const getPartPath = (part) => path.join(DATA_DIR, `${part}.json`);
+
+const ensureDataDir = async () => {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+};
+
+const readJsonFile = async (filePath, fallback) => {
   try {
-    const raw = await fs.readFile(DATA_PATH, 'utf8');
-    return normalizeData(JSON.parse(raw));
+    const raw = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
   } catch (err) {
-    return emptyData();
+    return fallback;
   }
 };
 
+const migrateLegacyDataFileIfNeeded = async () => {
+  await ensureDataDir();
+  const partPath = getPartPath('users');
+  const hasPartFiles = await fs
+    .access(partPath)
+    .then(() => true)
+    .catch(() => false);
+  if (hasPartFiles) {
+    return;
+  }
+  const legacy = await readJsonFile(DATA_PATH, null);
+  if (!legacy) {
+    return;
+  }
+  const normalized = normalizeData(legacy);
+  await Promise.all(
+    DATA_PARTS.map((part) =>
+      fs.writeFile(getPartPath(part), JSON.stringify(normalized[part] || [], null, 2), 'utf8')
+    )
+  );
+};
+
+const loadDataFromFiles = async () => {
+  await migrateLegacyDataFileIfNeeded();
+  await ensureDataDir();
+  const entries = await Promise.all(
+    DATA_PARTS.map(async (part) => {
+      const value = await readJsonFile(getPartPath(part), []);
+      return [part, Array.isArray(value) ? value : []];
+    })
+  );
+  return normalizeData(Object.fromEntries(entries));
+};
+
+const saveDataToFiles = async (data) => {
+  const normalized = normalizeData(data);
+  await ensureDataDir();
+  await Promise.all(
+    DATA_PARTS.map((part) =>
+      fs.writeFile(getPartPath(part), JSON.stringify(normalized[part] || [], null, 2), 'utf8')
+    )
+  );
+};
+
+const FIRESTORE_COLLECTION = 'goodrich_data_parts';
+
+const loadDataFromFirestore = async () => {
+  const db = await getFirebaseFirestore();
+  if (!db) {
+    return loadDataFromFiles();
+  }
+  const data = {};
+  let hasAnyData = false;
+  for (const part of DATA_PARTS) {
+    const doc = await db.collection(FIRESTORE_COLLECTION).doc(part).get();
+    const value = doc.exists ? doc.data()?.value : [];
+    data[part] = Array.isArray(value) ? value : [];
+    if (Array.isArray(data[part]) && data[part].length > 0) {
+      hasAnyData = true;
+    }
+  }
+  if (!hasAnyData) {
+    const fallback = await loadDataFromFiles();
+    const hasFallbackData = DATA_PARTS.some(
+      (part) => Array.isArray(fallback[part]) && fallback[part].length > 0
+    );
+    if (hasFallbackData) {
+      await saveDataToFirestore(fallback);
+      return fallback;
+    }
+  }
+  return normalizeData(data);
+};
+
+const saveDataToFirestore = async (data) => {
+  const db = await getFirebaseFirestore();
+  if (!db) {
+    return saveDataToFiles(data);
+  }
+  const normalized = normalizeData(data);
+  const batch = db.batch();
+  DATA_PARTS.forEach((part) => {
+    const ref = db.collection(FIRESTORE_COLLECTION).doc(part);
+    batch.set(ref, { value: normalized[part] || [], updatedAt: new Date().toISOString() });
+  });
+  await batch.commit();
+};
+
+const loadData = async () => {
+  if (USE_FIREBASE_DB) {
+    return loadDataFromFirestore();
+  }
+  return loadDataFromFiles();
+};
+
 const saveData = async (data) => {
-  await fs.writeFile(DATA_PATH, JSON.stringify(data, null, 2), 'utf8');
+  if (USE_FIREBASE_DB) {
+    return saveDataToFirestore(data);
+  }
+  return saveDataToFiles(data);
 };
 
 const nextId = (prefix, items) => {

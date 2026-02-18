@@ -109,6 +109,7 @@ npm run build
 - `FIREBASE_CLIENT_EMAIL=<service-account-email>`
 - `FIREBASE_PRIVATE_KEY=<service-account-private-key-with-escaped-newlines>`
 - `FIREBASE_STORAGE_BUCKET=<your-bucket-name>`
+- `FIREBASE_USE_DB=true` (optional, enables Firestore data persistence)
 
 3. Start command:
 
@@ -117,6 +118,21 @@ npm start
 ```
 
 This serves both UI and API from one domain.
+
+### Data persistence mode
+
+Backend supports two data modes:
+
+1. File mode (default)
+- Data is stored in split JSON files under `server/data/`:
+  - `users.json`, `customers.json`, `products.json`, `orders.json`,
+  - `pendingPayments.json`, `passwordResets.json`, `announcements.json`, `messages.json`, `gallery.json`
+- On first run, legacy `server/data.json` is automatically migrated to these files.
+
+2. Firebase Firestore mode
+- Enable with `FIREBASE_USE_DB=true` and Firebase credentials.
+- Data is stored in Firestore collection `goodrich_data_parts` (one doc per data part).
+- If Firestore is empty on first run, backend auto-seeds it from file data.
 
 ### Paypack webhook
 
