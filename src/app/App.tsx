@@ -21,6 +21,7 @@ import { OrderHistoryPage } from './pages/OrderHistoryPage';
 import { AnnouncementsPage } from './pages/AnnouncementsPage';
 import { AccountPage } from './pages/AccountPage';
 import { Toaster } from './components/ui/sonner';
+import { AppChatWidget } from './components/AppChatWidget';
 
 function AppContent() {
   const { currentPage, setCurrentPage, language } = useApp();
@@ -141,6 +142,7 @@ function AppContent() {
         </>
       )}
       <Toaster />
+      {!showSplash ? <AppChatWidget /> : null}
     </div>
   );
 }

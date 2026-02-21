@@ -43,6 +43,8 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 
 const ensureMongoConnected = async () => {
   if (!MONGODB_ENABLED) return;
@@ -1929,6 +1931,85 @@ app.delete('/api/admin/messages/:id', async (req, res) => {
   data.messages = data.messages.filter((entry) => entry.id !== id);
   await saveData(data);
   res.json({ ok: true });
+});
+
+app.post('/api/chat', async (req, res) => {
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: 'Chat assistant is not configured' });
+  }
+
+  const body = req.body || {};
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
+  const currentPage = typeof body.currentPage === 'string' ? body.currentPage : 'home';
+  const language = typeof body.language === 'string' ? body.language : 'en';
+  const cartItems = Number.isFinite(Number(body.cartItems)) ? Number(body.cartItems) : 0;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+  if (message.length > 1500) {
+    return res.status(400).json({ error: 'Message is too long' });
+  }
+
+  try {
+    const data = await loadData();
+    const productHints = (data.products || [])
+      .slice(0, 6)
+      .map((p) => {
+        const productName = resolveLocalizedText(p?.name, language);
+        return `${productName || 'Product'} (${Number(p?.price || 0)} FRW)`;
+      })
+      .join(', ');
+    const latestAnnouncement = data.announcements?.[0]
+      ? resolveLocalizedText(data.announcements[0]?.title, language)
+      : '';
+
+    const systemPrompt =
+      'You are the support assistant for HABAKURAMA Jean Dieu poultry app. ' +
+      'Be concise, practical, and app-specific. Help with products, cart, checkout, payment, account, orders, and contact. ' +
+      'If user asks outside app scope, politely redirect to app-relevant help. ' +
+      'Never invent prices or policies not in context.';
+
+    const contextPrompt =
+      `Context: page=${currentPage}, language=${language}, cartItems=${cartItems}. ` +
+      `Known products: ${productHints || 'none'}. ` +
+      `Latest announcement: ${latestAnnouncement || 'none'}.`;
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.4,
+        max_tokens: 350,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'system', content: contextPrompt },
+          { role: 'user', content: message }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const failureText = await response.text();
+      return res.status(502).json({
+        error: 'Chat provider request failed',
+        detail: failureText.slice(0, 300)
+      });
+    }
+
+    const payload = await response.json();
+    const reply = payload?.choices?.[0]?.message?.content;
+    if (!reply || typeof reply !== 'string') {
+      return res.status(502).json({ error: 'Invalid chat provider response' });
+    }
+    return res.json({ reply });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Chat assistant failed' });
+  }
 });
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
