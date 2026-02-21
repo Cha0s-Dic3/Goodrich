@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
@@ -9,7 +8,6 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
-import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,8 +16,6 @@ const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DIST_PATH = path.join(__dirname, '../dist');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:2007/goodrich';
-const MONGODB_ENABLED = String(process.env.MONGODB_ENABLED || 'true').toLowerCase() === 'true';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
@@ -43,25 +39,6 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
-
-const ensureMongoConnected = async () => {
-  if (!MONGODB_ENABLED) return;
-  if (mongoose.connection.readyState === 1) return;
-  await mongoose.connect(MONGODB_URI);
-};
-
-const connectMongo = async () => {
-  if (!MONGODB_ENABLED) return;
-  try {
-    await ensureMongoConnected();
-    await syncMongoIndexes();
-    const { host, name, readyState } = mongoose.connection;
-    console.log(`MongoDB connected (state ${readyState}) to ${host}/${name}`);
-  } catch (err) {
-    console.error('MongoDB connection failed:', err?.message || err);
-    process.exit(1);
-  }
-};
 
 const DELIVERY_FEES = {
   local: 3000,
@@ -309,207 +286,6 @@ const DATA_PARTS = [
   'gallery'
 ];
 
-const localizedTextSchema = new mongoose.Schema({}, { _id: false, strict: false });
-const orderItemSchema = new mongoose.Schema(
-  {
-    product: { type: mongoose.Schema.Types.Mixed, required: true },
-    quantity: { type: Number, required: true }
-  },
-  { _id: false, strict: false }
-);
-
-const userSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    name: { type: String, default: '' },
-    email: { type: String, required: true, index: true, unique: true },
-    passwordHash: { type: String, default: '' },
-    customerId: { type: String, index: true },
-    phone: { type: String, default: '' },
-    avatarUrl: { type: String, default: '' },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const customerSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    name: { type: String, default: '' },
-    phone: { type: String, default: '' },
-    email: { type: String, default: '', index: true },
-    addresses: { type: [String], default: [] },
-    totalOrders: { type: Number, default: 0 },
-    totalSpent: { type: Number, default: 0 },
-    joinedDate: { type: String, default: '' }
-  },
-  { strict: false, versionKey: false }
-);
-
-const productSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    name: { type: localizedTextSchema, default: {} },
-    description: { type: localizedTextSchema, default: {} },
-    price: { type: Number, default: 0 },
-    category: { type: String, default: '' },
-    imageUrl: { type: String, default: '' },
-    images: { type: [String], default: [] },
-    unit: { type: String, default: '' },
-    stock: { type: Number, default: 0 },
-    isActive: { type: Boolean, default: true },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const orderSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    userId: { type: String, index: true },
-    customerId: { type: String, index: true },
-    customerName: { type: String, default: '' },
-    customerPhone: { type: String, default: '' },
-    customerEmail: { type: String, default: '' },
-    items: { type: [orderItemSchema], default: [] },
-    totalAmount: { type: Number, default: 0 },
-    deliveryZone: { type: String, default: 'local' },
-    deliveryFee: { type: Number, default: 0 },
-    deliveryAddress: { type: String, default: '' },
-    deliveryDate: { type: String, default: '' },
-    deliveryTimeWindow: { type: String, default: '' },
-    status: { type: String, default: 'pending', index: true },
-    notes: { type: String, default: '' },
-    paypackRef: { type: String },
-    paymentStatus: { type: String },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const pendingPaymentSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    ref: { type: String, index: true, unique: true },
-    status: { type: String, default: 'pending', index: true },
-    amount: { type: Number, default: 0 },
-    subtotal: { type: Number, default: 0 },
-    deliveryFee: { type: Number, default: 0 },
-    userId: { type: String, index: true },
-    customerId: { type: String, index: true },
-    orderPayload: { type: mongoose.Schema.Types.Mixed, default: {} },
-    orderId: { type: String },
-    failureReason: { type: String },
-    retriedFrom: { type: String },
-    retriedTo: { type: String },
-    method: { type: String },
-    receiverName: { type: String },
-    receiverPhone: { type: String },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String },
-    approvedAt: { type: String },
-    cancelledAt: { type: String },
-    expiresAt: { type: Number }
-  },
-  { strict: false, versionKey: false }
-);
-
-const passwordResetSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    userId: { type: String, index: true },
-    email: { type: String, index: true },
-    name: { type: String },
-    token: { type: String, required: true },
-    hasAccount: { type: Boolean, default: false },
-    createdAt: { type: String, default: '' },
-    expiresAt: { type: Number, default: 0 },
-    used: { type: Boolean, default: false },
-    usedAt: { type: String },
-    sentAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const announcementSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    title: { type: localizedTextSchema, default: {} },
-    content: { type: localizedTextSchema, default: {} },
-    author: { type: String, default: 'Admin' },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const messageSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    name: { type: String, default: '' },
-    email: { type: String, default: '', index: true },
-    phone: { type: String, default: '' },
-    message: { type: String, default: '' },
-    status: { type: String, default: 'new', index: true },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const gallerySchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, index: true, unique: true },
-    title: { type: localizedTextSchema, default: {} },
-    description: { type: localizedTextSchema, default: {} },
-    category: { type: String, default: '', index: true },
-    imageUrl: { type: String, default: '' },
-    createdAt: { type: String, default: '' },
-    updatedAt: { type: String }
-  },
-  { strict: false, versionKey: false }
-);
-
-const User = mongoose.models.User || mongoose.model('User', userSchema);
-const Customer = mongoose.models.Customer || mongoose.model('Customer', customerSchema);
-const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
-const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
-const PendingPayment =
-  mongoose.models.PendingPayment || mongoose.model('PendingPayment', pendingPaymentSchema);
-const PasswordReset =
-  mongoose.models.PasswordReset || mongoose.model('PasswordReset', passwordResetSchema);
-const Announcement = mongoose.models.Announcement || mongoose.model('Announcement', announcementSchema);
-const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
-const Gallery = mongoose.models.Gallery || mongoose.model('Gallery', gallerySchema);
-
-const MODEL_MAP = {
-  users: User,
-  customers: Customer,
-  products: Product,
-  orders: Order,
-  pendingPayments: PendingPayment,
-  passwordResets: PasswordReset,
-  announcements: Announcement,
-  messages: Message,
-  gallery: Gallery
-};
-
-const syncMongoIndexes = async () => {
-  const models = Object.values(MODEL_MAP);
-  await Promise.all(
-    models.map(async (model) => {
-      try {
-        await model.syncIndexes();
-      } catch (err) {
-        console.warn(`MongoDB index sync failed for ${model.modelName}:`, err?.message || err);
-      }
-    })
-  );
-};
-
 const normalizeData = (data) => ({
   ...emptyData(),
   ...data,
@@ -627,65 +403,7 @@ const saveDataToFirestore = async (data) => {
   await batch.commit();
 };
 
-const stripMongoMeta = (item) => {
-  if (!item || typeof item !== 'object') return item;
-  const { _id, __v, ...rest } = item;
-  return rest;
-};
-
-const loadDataFromMongo = async () => {
-  if (!MONGODB_ENABLED) {
-    return loadDataFromFiles();
-  }
-  await ensureMongoConnected();
-  const entries = await Promise.all(
-    DATA_PARTS.map(async (part) => {
-      const model = MODEL_MAP[part];
-      const items = model ? await model.find({}).lean() : [];
-      return [part, Array.isArray(items) ? items.map(stripMongoMeta) : []];
-    })
-  );
-  const data = Object.fromEntries(entries);
-  const hasAnyData = DATA_PARTS.some((part) => Array.isArray(data[part]) && data[part].length > 0);
-
-  if (!hasAnyData) {
-    const fallback = await loadDataFromFiles();
-    const hasFallbackData = DATA_PARTS.some(
-      (part) => Array.isArray(fallback[part]) && fallback[part].length > 0
-    );
-    if (hasFallbackData) {
-      await saveDataToMongo(fallback);
-      return fallback;
-    }
-  }
-
-  return normalizeData(data);
-};
-
-const saveDataToMongo = async (data) => {
-  if (!MONGODB_ENABLED) {
-    return saveDataToFiles(data);
-  }
-  await ensureMongoConnected();
-  const normalized = normalizeData(data);
-  await Promise.all(
-    DATA_PARTS.map(async (part) => {
-      const model = MODEL_MAP[part];
-      if (!model) return;
-      await model.deleteMany({});
-      const items = Array.isArray(normalized[part]) ? normalized[part] : [];
-      if (items.length > 0) {
-        const cleaned = items.map(stripMongoMeta);
-        await model.insertMany(cleaned, { ordered: false });
-      }
-    })
-  );
-};
-
 const loadData = async () => {
-  if (MONGODB_ENABLED) {
-    return loadDataFromMongo();
-  }
   if (USE_FIREBASE_DB) {
     return loadDataFromFirestore();
   }
@@ -693,9 +411,6 @@ const loadData = async () => {
 };
 
 const saveData = async (data) => {
-  if (MONGODB_ENABLED) {
-    return saveDataToMongo(data);
-  }
   if (USE_FIREBASE_DB) {
     return saveDataToFirestore(data);
   }
@@ -2031,7 +1746,6 @@ if (NODE_ENV === 'production') {
 
 const runningInFunction = Boolean(process.env.FUNCTION_TARGET || process.env.K_SERVICE);
 if (!runningInFunction) {
-  await connectMongo();
   app.listen(PORT, () => {
     console.log(`API server listening on http://localhost:${PORT}`);
   });

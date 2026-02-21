@@ -41,7 +41,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Goodrich Farm Logo'
     },
     splash: {
-      farmName: 'Goodrich Chicken Farm',
+      farmName: 'HABAKURAMA Jean Dieu',
       title: 'Fresh Eggs, Trusted Farming',
       subtitle: 'Preparing quality farm products and delivery services...'
     },
@@ -590,7 +590,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Ikirango cya Goodrich Farm'
     },
     splash: {
-      farmName: 'Goodrich Chicken Farm',
+      farmName: 'HABAKURAMA Jean Dieu',
       title: "Amagi mashya avuye ku bworozi bwizewe",
       subtitle: "Turimo gutegura ibicuruzwa byiza n'itangwa ryabyo..."
     },
@@ -800,7 +800,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Nembo ya Goodrich Farm'
     },
     splash: {
-      farmName: 'Goodrich Chicken Farm',
+      farmName: 'HABAKURAMA Jean Dieu',
       title: 'Mayai mapya kutoka shamba linaloaminika',
       subtitle: 'Tunaandaa bidhaa bora za shamba na huduma za usafirishaji...'
     },
@@ -994,7 +994,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Logo Goodrich Farm'
     },
     splash: {
-      farmName: 'Goodrich Chicken Farm',
+      farmName: 'HABAKURAMA Jean Dieu',
       title: 'Des oeufs frais, un elevage fiable',
       subtitle: 'Preparation des produits fermiers de qualite et du service de livraison...'
     },

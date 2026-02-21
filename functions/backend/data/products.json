@@ -1,0 +1,46 @@
+[
+  {
+    "id": "1",
+    "name": "Small Eggs Tray",
+    "description": "Fresh farm eggs - Small size, 30 eggs per tray",
+    "category": "eggs",
+    "size": "small",
+    "quantity": 30,
+    "price": 4500,
+    "stock": 50,
+    "image": "small-eggs"
+  },
+  {
+    "id": "2",
+    "name": "Medium Eggs Tray",
+    "description": "Fresh farm eggs - Medium size, 30 eggs per tray",
+    "category": "eggs",
+    "size": "medium",
+    "quantity": 30,
+    "price": 5500,
+    "stock": 75,
+    "image": "medium-eggs"
+  },
+  {
+    "id": "3",
+    "name": "Large Eggs Tray",
+    "description": "Fresh farm eggs - Large size, 30 eggs per tray",
+    "category": "eggs",
+    "size": "large",
+    "quantity": 30,
+    "price": 6500,
+    "stock": 60,
+    "image": "large-eggs"
+  },
+  {
+    "id": "4",
+    "name": "Extra Large Eggs Tray",
+    "description": "Fresh farm eggs - Extra Large size, 30 eggs per tray",
+    "category": "eggs",
+    "size": "extra-large",
+    "quantity": 30,
+    "price": 7500,
+    "stock": 40,
+    "image": "xl-eggs"
+  }
+]
