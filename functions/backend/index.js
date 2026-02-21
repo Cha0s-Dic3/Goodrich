@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
@@ -8,6 +9,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +18,8 @@ const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DIST_PATH = path.join(__dirname, '../dist');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:2007/goodrich';
+const MONGODB_ENABLED = String(process.env.MONGODB_ENABLED || 'true').toLowerCase() === 'true';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
@@ -39,6 +43,27 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+const ensureMongoConnected = async () => {
+  if (!MONGODB_ENABLED) return;
+  if (mongoose.connection.readyState === 1) return;
+  await mongoose.connect(MONGODB_URI);
+};
+
+const connectMongo = async () => {
+  if (!MONGODB_ENABLED) return;
+  try {
+    await ensureMongoConnected();
+    await syncMongoIndexes();
+    const { host, name, readyState } = mongoose.connection;
+    console.log(`MongoDB connected (state ${readyState}) to ${host}/${name}`);
+  } catch (err) {
+    console.error('MongoDB connection failed:', err?.message || err);
+    process.exit(1);
+  }
+};
 
 const DELIVERY_FEES = {
   local: 3000,
@@ -259,6 +284,10 @@ const saveUploadedFile = async (subDir, file) => {
   return { url: buildUploadUrl(key), key };
 };
 
+const ensureUploadsDir = async () => {
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+};
+
 const avatarUpload = createUploader();
 const galleryUpload = createUploader();
 
@@ -285,6 +314,215 @@ const DATA_PARTS = [
   'messages',
   'gallery'
 ];
+
+const localizedTextSchema = new mongoose.Schema({}, { _id: false, strict: false });
+const orderItemSchema = new mongoose.Schema(
+  {
+    product: { type: mongoose.Schema.Types.Mixed, required: true },
+    quantity: { type: Number, required: true }
+  },
+  { _id: false, strict: false }
+);
+
+const userSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    name: { type: String, default: '' },
+    email: { type: String, required: true, index: true, unique: true },
+    passwordHash: { type: String, default: '' },
+    customerId: { type: String, index: true },
+    phone: { type: String, default: '' },
+    avatarUrl: { type: String, default: '' },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const customerSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    name: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    email: { type: String, default: '', index: true },
+    addresses: { type: [String], default: [] },
+    totalOrders: { type: Number, default: 0 },
+    totalSpent: { type: Number, default: 0 },
+    joinedDate: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
+const productSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    name: { type: localizedTextSchema, default: {} },
+    description: { type: localizedTextSchema, default: {} },
+    price: { type: Number, default: 0 },
+    category: { type: String, default: '' },
+    imageUrl: { type: String, default: '' },
+    images: { type: [String], default: [] },
+    unit: { type: String, default: '' },
+    stock: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const orderSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    userId: { type: String, index: true },
+    customerId: { type: String, index: true },
+    customerName: { type: String, default: '' },
+    customerPhone: { type: String, default: '' },
+    customerEmail: { type: String, default: '' },
+    items: { type: [orderItemSchema], default: [] },
+    totalAmount: { type: Number, default: 0 },
+    deliveryZone: { type: String, default: 'local' },
+    deliveryFee: { type: Number, default: 0 },
+    deliveryAddress: { type: String, default: '' },
+    deliveryDate: { type: String, default: '' },
+    deliveryTimeWindow: { type: String, default: '' },
+    status: { type: String, default: 'pending', index: true },
+    notes: { type: String, default: '' },
+    paypackRef: { type: String },
+    paymentStatus: { type: String },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const pendingPaymentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    ref: { type: String, index: true, unique: true },
+    status: { type: String, default: 'pending', index: true },
+    amount: { type: Number, default: 0 },
+    subtotal: { type: Number, default: 0 },
+    deliveryFee: { type: Number, default: 0 },
+    userId: { type: String, index: true },
+    customerId: { type: String, index: true },
+    orderPayload: { type: mongoose.Schema.Types.Mixed, default: {} },
+    orderId: { type: String },
+    failureReason: { type: String },
+    retriedFrom: { type: String },
+    retriedTo: { type: String },
+    method: { type: String },
+    receiverName: { type: String },
+    receiverPhone: { type: String },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String },
+    approvedAt: { type: String },
+    cancelledAt: { type: String },
+    expiresAt: { type: Number }
+  },
+  { strict: false, versionKey: false }
+);
+
+const passwordResetSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    userId: { type: String, index: true },
+    email: { type: String, index: true },
+    name: { type: String },
+    token: { type: String, required: true },
+    hasAccount: { type: Boolean, default: false },
+    createdAt: { type: String, default: '' },
+    expiresAt: { type: Number, default: 0 },
+    used: { type: Boolean, default: false },
+    usedAt: { type: String },
+    sentAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const announcementSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    title: { type: localizedTextSchema, default: {} },
+    content: { type: localizedTextSchema, default: {} },
+    author: { type: String, default: 'Admin' },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const messageSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    name: { type: String, default: '' },
+    email: { type: String, default: '', index: true },
+    phone: { type: String, default: '' },
+    message: { type: String, default: '' },
+    status: { type: String, default: 'new', index: true },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const gallerySchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    title: { type: localizedTextSchema, default: {} },
+    description: { type: localizedTextSchema, default: {} },
+    category: { type: String, default: '', index: true },
+    imageUrl: { type: String, default: '' },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+const Customer = mongoose.models.Customer || mongoose.model('Customer', customerSchema);
+const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
+const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
+const PendingPayment =
+  mongoose.models.PendingPayment || mongoose.model('PendingPayment', pendingPaymentSchema);
+const PasswordReset =
+  mongoose.models.PasswordReset || mongoose.model('PasswordReset', passwordResetSchema);
+const Announcement = mongoose.models.Announcement || mongoose.model('Announcement', announcementSchema);
+const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
+const Gallery = mongoose.models.Gallery || mongoose.model('Gallery', gallerySchema);
+
+const MODEL_MAP = {
+  users: User,
+  customers: Customer,
+  products: Product,
+  orders: Order,
+  pendingPayments: PendingPayment,
+  passwordResets: PasswordReset,
+  announcements: Announcement,
+  messages: Message,
+  gallery: Gallery
+};
+
+let mongoWriteQueue = Promise.resolve();
+
+const runMongoWrite = async (task) => {
+  const run = mongoWriteQueue.then(task, task);
+  mongoWriteQueue = run.catch(() => undefined);
+  return run;
+};
+
+const syncMongoIndexes = async () => {
+  const models = Object.values(MODEL_MAP);
+  await Promise.all(
+    models.map(async (model) => {
+      try {
+        await model.syncIndexes();
+      } catch (err) {
+        console.warn(`MongoDB index sync failed for ${model.modelName}:`, err?.message || err);
+      }
+    })
+  );
+};
 
 const normalizeData = (data) => ({
   ...emptyData(),
@@ -403,7 +641,67 @@ const saveDataToFirestore = async (data) => {
   await batch.commit();
 };
 
+const stripMongoMeta = (item) => {
+  if (!item || typeof item !== 'object') return item;
+  const { _id, __v, ...rest } = item;
+  return rest;
+};
+
+const loadDataFromMongo = async () => {
+  if (!MONGODB_ENABLED) {
+    return loadDataFromFiles();
+  }
+  await ensureMongoConnected();
+  const entries = await Promise.all(
+    DATA_PARTS.map(async (part) => {
+      const model = MODEL_MAP[part];
+      const items = model ? await model.find({}).lean() : [];
+      return [part, Array.isArray(items) ? items.map(stripMongoMeta) : []];
+    })
+  );
+  const data = Object.fromEntries(entries);
+  const hasAnyData = DATA_PARTS.some((part) => Array.isArray(data[part]) && data[part].length > 0);
+
+  if (!hasAnyData) {
+    const fallback = await loadDataFromFiles();
+    const hasFallbackData = DATA_PARTS.some(
+      (part) => Array.isArray(fallback[part]) && fallback[part].length > 0
+    );
+    if (hasFallbackData) {
+      await saveDataToMongo(fallback);
+      return fallback;
+    }
+  }
+
+  return normalizeData(data);
+};
+
+const saveDataToMongo = async (data) => {
+  if (!MONGODB_ENABLED) {
+    return saveDataToFiles(data);
+  }
+  await ensureMongoConnected();
+  return runMongoWrite(async () => {
+    const normalized = normalizeData(data);
+    await Promise.all(
+      DATA_PARTS.map(async (part) => {
+        const model = MODEL_MAP[part];
+        if (!model) return;
+        await model.deleteMany({});
+        const items = Array.isArray(normalized[part]) ? normalized[part] : [];
+        if (items.length > 0) {
+          const cleaned = items.map(stripMongoMeta);
+          await model.insertMany(cleaned, { ordered: false });
+        }
+      })
+    );
+  });
+};
+
 const loadData = async () => {
+  if (MONGODB_ENABLED) {
+    return loadDataFromMongo();
+  }
   if (USE_FIREBASE_DB) {
     return loadDataFromFirestore();
   }
@@ -411,6 +709,9 @@ const loadData = async () => {
 };
 
 const saveData = async (data) => {
+  if (MONGODB_ENABLED) {
+    return saveDataToMongo(data);
+  }
   if (USE_FIREBASE_DB) {
     return saveDataToFirestore(data);
   }
@@ -1340,7 +1641,8 @@ app.post('/api/uploads/avatar', authMiddleware, avatarUpload.single('file'), asy
     const stored = await saveUploadedFile('avatars', req.file);
     return res.json({ url: stored.url });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to store uploaded file' });
+    console.error('Avatar upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
 
@@ -1352,7 +1654,8 @@ app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) 
     const stored = await saveUploadedFile('gallery', req.file);
     return res.json({ url: stored.url });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to store uploaded file' });
+    console.error('Gallery upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
 
@@ -1646,6 +1949,85 @@ app.delete('/api/admin/messages/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/chat', async (req, res) => {
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: 'Chat assistant is not configured' });
+  }
+
+  const body = req.body || {};
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
+  const currentPage = typeof body.currentPage === 'string' ? body.currentPage : 'home';
+  const language = typeof body.language === 'string' ? body.language : 'en';
+  const cartItems = Number.isFinite(Number(body.cartItems)) ? Number(body.cartItems) : 0;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+  if (message.length > 1500) {
+    return res.status(400).json({ error: 'Message is too long' });
+  }
+
+  try {
+    const data = await loadData();
+    const productHints = (data.products || [])
+      .slice(0, 6)
+      .map((p) => {
+        const productName = resolveLocalizedText(p?.name, language);
+        return `${productName || 'Product'} (${Number(p?.price || 0)} FRW)`;
+      })
+      .join(', ');
+    const latestAnnouncement = data.announcements?.[0]
+      ? resolveLocalizedText(data.announcements[0]?.title, language)
+      : '';
+
+    const systemPrompt =
+      'You are the support assistant for HABAKURAMA Jean Dieu poultry app. ' +
+      'Be concise, practical, and app-specific. Help with products, cart, checkout, payment, account, orders, and contact. ' +
+      'If user asks outside app scope, politely redirect to app-relevant help. ' +
+      'Never invent prices or policies not in context.';
+
+    const contextPrompt =
+      `Context: page=${currentPage}, language=${language}, cartItems=${cartItems}. ` +
+      `Known products: ${productHints || 'none'}. ` +
+      `Latest announcement: ${latestAnnouncement || 'none'}.`;
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.4,
+        max_tokens: 350,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'system', content: contextPrompt },
+          { role: 'user', content: message }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const failureText = await response.text();
+      return res.status(502).json({
+        error: 'Chat provider request failed',
+        detail: failureText.slice(0, 300)
+      });
+    }
+
+    const payload = await response.json();
+    const reply = payload?.choices?.[0]?.message?.content;
+    if (!reply || typeof reply !== 'string') {
+      return res.status(502).json({ error: 'Invalid chat provider response' });
+    }
+    return res.json({ reply });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || 'Chat assistant failed' });
+  }
+});
+
 app.post('/api/orders', authMiddleware, async (req, res) => {
   const payload = req.body || {};
   const data = await loadData();
@@ -1744,8 +2126,22 @@ if (NODE_ENV === 'production') {
   });
 }
 
+app.use((err, req, res, next) => {
+  if (!err) return next();
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'Image exceeds 5MB limit' });
+  }
+  if (typeof err?.message === 'string' && err.message.includes('Only image uploads are allowed')) {
+    return res.status(400).json({ error: 'Only image uploads are allowed' });
+  }
+  console.error('Unhandled request error:', err?.message || err);
+  return res.status(500).json({ error: err?.message || 'Request failed' });
+});
+
 const runningInFunction = Boolean(process.env.FUNCTION_TARGET || process.env.K_SERVICE);
 if (!runningInFunction) {
+  await ensureUploadsDir();
+  await connectMongo();
   app.listen(PORT, () => {
     console.log(`API server listening on http://localhost:${PORT}`);
   });

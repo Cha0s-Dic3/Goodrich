@@ -284,6 +284,10 @@ const saveUploadedFile = async (subDir, file) => {
   return { url: buildUploadUrl(key), key };
 };
 
+const ensureUploadsDir = async () => {
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+};
+
 const avatarUpload = createUploader();
 const galleryUpload = createUploader();
 
@@ -499,6 +503,14 @@ const MODEL_MAP = {
   gallery: Gallery
 };
 
+let mongoWriteQueue = Promise.resolve();
+
+const runMongoWrite = async (task) => {
+  const run = mongoWriteQueue.then(task, task);
+  mongoWriteQueue = run.catch(() => undefined);
+  return run;
+};
+
 const syncMongoIndexes = async () => {
   const models = Object.values(MODEL_MAP);
   await Promise.all(
@@ -669,19 +681,21 @@ const saveDataToMongo = async (data) => {
     return saveDataToFiles(data);
   }
   await ensureMongoConnected();
-  const normalized = normalizeData(data);
-  await Promise.all(
-    DATA_PARTS.map(async (part) => {
-      const model = MODEL_MAP[part];
-      if (!model) return;
-      await model.deleteMany({});
-      const items = Array.isArray(normalized[part]) ? normalized[part] : [];
-      if (items.length > 0) {
-        const cleaned = items.map(stripMongoMeta);
-        await model.insertMany(cleaned, { ordered: false });
-      }
-    })
-  );
+  return runMongoWrite(async () => {
+    const normalized = normalizeData(data);
+    await Promise.all(
+      DATA_PARTS.map(async (part) => {
+        const model = MODEL_MAP[part];
+        if (!model) return;
+        await model.deleteMany({});
+        const items = Array.isArray(normalized[part]) ? normalized[part] : [];
+        if (items.length > 0) {
+          const cleaned = items.map(stripMongoMeta);
+          await model.insertMany(cleaned, { ordered: false });
+        }
+      })
+    );
+  });
 };
 
 const loadData = async () => {
@@ -1627,7 +1641,8 @@ app.post('/api/uploads/avatar', authMiddleware, avatarUpload.single('file'), asy
     const stored = await saveUploadedFile('avatars', req.file);
     return res.json({ url: stored.url });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to store uploaded file' });
+    console.error('Avatar upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
 
@@ -1639,7 +1654,8 @@ app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) 
     const stored = await saveUploadedFile('gallery', req.file);
     return res.json({ url: stored.url });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to store uploaded file' });
+    console.error('Gallery upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
 
@@ -2110,8 +2126,21 @@ if (NODE_ENV === 'production') {
   });
 }
 
+app.use((err, req, res, next) => {
+  if (!err) return next();
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'Image exceeds 5MB limit' });
+  }
+  if (typeof err?.message === 'string' && err.message.includes('Only image uploads are allowed')) {
+    return res.status(400).json({ error: 'Only image uploads are allowed' });
+  }
+  console.error('Unhandled request error:', err?.message || err);
+  return res.status(500).json({ error: err?.message || 'Request failed' });
+});
+
 const runningInFunction = Boolean(process.env.FUNCTION_TARGET || process.env.K_SERVICE);
 if (!runningInFunction) {
+  await ensureUploadsDir();
   await connectMongo();
   app.listen(PORT, () => {
     console.log(`API server listening on http://localhost:${PORT}`);
