@@ -41,7 +41,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Goodrich Farm Logo'
     },
     splash: {
-      farmName: 'HABAKURAMA Jean Dieu',
+      farmName: 'HABAKURAMA Jean de Dieu',
       title: 'Fresh Eggs, Trusted Farming',
       subtitle: 'Preparing quality farm products and delivery services...'
     },
@@ -133,7 +133,7 @@ export const translations: TranslationTree = {
         minimumLabel: 'Minimum Order:',
         minimumValue: '4,500 FRW'
       },
-      copyright: 'Copyright 2026 Goodrich Chicken Farm. Farmer: HABAKURAMA Jean Dieu. All rights reserved.'
+      copyright: 'Copyright 2026 Goodrich Chicken Farm. Farmer: HABAKURAMA Jean de Dieu. All rights reserved.'
     },
     home: {
       heroBadge: 'Fresh from our farm to your table',
@@ -331,7 +331,7 @@ export const translations: TranslationTree = {
       commitmentTitle: 'Our Commitment to Quality',
       commitmentDesc: 'Quality is not a promise it is our daily practice.',
       founderTitle: 'Meet Our Founder',
-      founderName: 'HABAKURAMA Jean Dieu',
+      founderName: 'HABAKURAMA Jean de Dieu',
       founderRole: 'Founder and Head Farmer',
       founderDesc: 'Leading Goodrich Farm with passion, dedication, and a commitment to excellence in poultry farming.'
     },
@@ -590,7 +590,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Ikirango cya Goodrich Farm'
     },
     splash: {
-      farmName: 'HABAKURAMA Jean Dieu',
+      farmName: 'HABAKURAMA Jean de Dieu',
       title: "Amagi mashya avuye ku bworozi bwizewe",
       subtitle: "Turimo gutegura ibicuruzwa byiza n'itangwa ryabyo..."
     },
@@ -800,7 +800,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Nembo ya Goodrich Farm'
     },
     splash: {
-      farmName: 'HABAKURAMA Jean Dieu',
+      farmName: 'HABAKURAMA Jean de Dieu',
       title: 'Mayai mapya kutoka shamba linaloaminika',
       subtitle: 'Tunaandaa bidhaa bora za shamba na huduma za usafirishaji...'
     },
@@ -994,7 +994,7 @@ export const translations: TranslationTree = {
       logoAlt: 'Logo Goodrich Farm'
     },
     splash: {
-      farmName: 'HABAKURAMA Jean Dieu',
+      farmName: 'HABAKURAMA Jean de Dieu',
       title: 'Des oeufs frais, un elevage fiable',
       subtitle: 'Preparation des produits fermiers de qualite et du service de livraison...'
     },
