@@ -2127,7 +2127,9 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ error: err?.message || 'Request failed' });
 });
 
-const runningInFunction = Boolean(process.env.FUNCTION_TARGET || process.env.K_SERVICE);
+const runningInFunction = Boolean(
+  process.env.FUNCTION_TARGET || process.env.K_SERVICE || process.env.VERCEL
+);
 if (!runningInFunction) {
   await ensureUploadsDir();
   await connectMongo();
