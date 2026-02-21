@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
+import { toAssetUrl } from '../../lib/api';
 
 const categories = [
   { value: 'facilities', label: 'Farm Facilities' },
@@ -75,7 +76,7 @@ export function GalleryManagement() {
     setEditingId(item.id);
     setEditData(item);
     setEditImageFile(null);
-    setEditImagePreview(item.imageUrl);
+    setEditImagePreview(toAssetUrl(item.imageUrl));
   };
 
   const handleSave = async (id: string) => {
@@ -207,7 +208,7 @@ export function GalleryManagement() {
                 ) : (
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="w-full md:w-48 h-36 bg-[#F0EAD6] overflow-hidden rounded-lg">
-                      <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                      <img src={toAssetUrl(item.imageUrl)} alt={item.title} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl text-[#3D2817] mb-2">{item.title}</h3>

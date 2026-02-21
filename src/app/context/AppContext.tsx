@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { toApiUrl, toAssetUrl } from '../lib/api';
 
 // Types
 export interface Product {
@@ -196,7 +197,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const fetchJson = async (url: string, options?: RequestInit) => {
-  const res = await fetch(url, options);
+  const res = await fetch(toApiUrl(url), options);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `Request failed (${res.status})`);
@@ -208,7 +209,7 @@ const uploadFile = async (url: string, file: File, token?: string | null) => {
   const formData = new FormData();
   formData.append('file', file);
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(url, {
+  const res = await fetch(toApiUrl(url), {
     method: 'POST',
     headers,
     body: formData
@@ -218,7 +219,7 @@ const uploadFile = async (url: string, file: File, token?: string | null) => {
     throw new Error(data.error || `Upload failed (${res.status})`);
   }
   const data = await res.json();
-  return data.url as string;
+  return toAssetUrl(String(data.url || ''));
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -367,7 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadGallery = async () => {
     try {
       const data = await fetchJson(`/api/gallery?lang=${language}`);
-      setGallery(data.gallery || []);
+      setGallery((data.gallery || []).map((item: GalleryItem) => ({ ...item, imageUrl: toAssetUrl(item.imageUrl) })));
     } catch (err) {
       setGallery([]);
     }
@@ -379,7 +380,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...item, lang: language })
     });
-    setGallery(prev => [data.item, ...prev]);
+    setGallery(prev => [{ ...data.item, imageUrl: toAssetUrl(data.item?.imageUrl || '') }, ...prev]);
   };
 
   const uploadGalleryImage = async (file: File) => {
@@ -392,7 +393,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...item, lang: language })
     });
-    setGallery(prev => prev.map(entry => (entry.id === id ? data.item : entry)));
+    setGallery(prev =>
+      prev.map(entry =>
+        entry.id === id ? { ...data.item, imageUrl: toAssetUrl(data.item?.imageUrl || '') } : entry
+      )
+    );
   };
 
   const deleteGalleryItem = async (id: string) => {
@@ -531,7 +536,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       body: JSON.stringify(payload)
     });
-    setAuthUser(data.user);
+    setAuthUser({ ...data.user, avatarUrl: toAssetUrl(data.user?.avatarUrl || '') });
   };
 
   const uploadAvatar = async (file: File) => {
@@ -611,7 +616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw new Error('Admin is logged in. Log out admin first.');
     }
     setAuthToken(token);
-    setAuthUser(user);
+    setAuthUser({ ...user, avatarUrl: toAssetUrl(user.avatarUrl || '') });
   };
 
   const userLogout = () => {

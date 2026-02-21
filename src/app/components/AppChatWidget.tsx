@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Loader2, MessageCircle, Send, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { toApiUrl } from '../lib/api';
 
 type ChatMessage = {
   role: 'user' | 'assistant';
@@ -34,7 +35,7 @@ export function AppChatWidget() {
     setMessages((prev) => [...prev, { role: 'user', text }]);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(toApiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,4 +132,3 @@ export function AppChatWidget() {
     </div>
   );
 }
-

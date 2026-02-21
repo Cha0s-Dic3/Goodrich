@@ -5,6 +5,7 @@ import { useI18n } from '../hooks/useI18n';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import logoImage from '../../Goodrich logo.png';
+import { toAssetUrl } from '../lib/api';
 
 export function Header() {
   const { currentPage, setCurrentPage, cart, isAdmin, adminLogout, isUserLoggedIn, authUser, language, setLanguage } = useApp();
@@ -129,7 +130,7 @@ export function Header() {
             >
               {authUser?.avatarUrl ? (
                 <img
-                  src={authUser.avatarUrl}
+                  src={toAssetUrl(authUser.avatarUrl)}
                   alt={authUser.name || 'User'}
                   className="h-full w-full object-cover"
                 />

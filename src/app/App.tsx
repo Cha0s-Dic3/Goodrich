@@ -22,6 +22,7 @@ import { AnnouncementsPage } from './pages/AnnouncementsPage';
 import { AccountPage } from './pages/AccountPage';
 import { Toaster } from './components/ui/sonner';
 import { AppChatWidget } from './components/AppChatWidget';
+import { toApiUrl } from './lib/api';
 
 function AppContent() {
   const { currentPage, setCurrentPage, language } = useApp();
@@ -38,6 +39,27 @@ function AppContent() {
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      if (typeof input === 'string') {
+        if (input.startsWith('/api/') || input === '/api' || input.startsWith('/uploads/')) {
+          return originalFetch(toApiUrl(input), init);
+        }
+      } else if (input instanceof Request) {
+        const currentOrigin = window.location.origin;
+        if (input.url.startsWith(`${currentOrigin}/api/`) || input.url.startsWith(`${currentOrigin}/uploads/`)) {
+          const rewrittenUrl = input.url.replace(currentOrigin, '').replace(/^/, '');
+          return originalFetch(toApiUrl(rewrittenUrl), init);
+        }
+      }
+      return originalFetch(input, init);
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   useEffect(() => {
     const size = 128;

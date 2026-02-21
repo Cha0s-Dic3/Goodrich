@@ -3,6 +3,7 @@ import { Users, ShieldCheck, ShoppingBag, DollarSign } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useApp } from '../../context/AppContext';
+import { toApiUrl } from '../../lib/api';
 
 interface AccountRow {
   id: string;
@@ -17,7 +18,7 @@ export function CustomerAccounts() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
 
   useEffect(() => {
-    fetch('/api/admin/accounts?limit=1000')
+    fetch(toApiUrl('/api/admin/accounts?limit=1000'))
       .then((res) => res.json())
       .then((data) => setAccounts(data.accounts || []))
       .catch(() => setAccounts([]));

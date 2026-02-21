@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
+import { toAssetUrl } from '../lib/api';
 
 export function AccountPage() {
   const {
@@ -128,7 +129,7 @@ export function AccountPage() {
                 <div className="w-20 h-20 rounded-full bg-[#F0EAD6] border-2 border-[#8B4513] overflow-hidden flex items-center justify-center">
                   {formData.avatarUrl ? (
                     <img
-                      src={formData.avatarUrl}
+                      src={toAssetUrl(formData.avatarUrl)}
                       alt={authUser.name}
                       className="w-full h-full object-cover"
                     />

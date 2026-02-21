@@ -3,6 +3,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { useApp } from '../context/AppContext';
 import { useI18n } from '../hooks/useI18n';
+import { toAssetUrl } from '../lib/api';
 
 export function GalleryPage() {
   const { gallery, loadGallery } = useApp();
@@ -66,7 +67,7 @@ export function GalleryPage() {
               <Card key={item.id} className="overflow-hidden bg-white border-2 border-[#D2B48C] hover:border-[#FFD700] transition-all hover:shadow-xl group">
                 <div className="aspect-square overflow-hidden">
                   <img
-                    src={item.imageUrl}
+                    src={toAssetUrl(item.imageUrl)}
                     alt={item.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
