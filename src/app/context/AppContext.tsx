@@ -634,13 +634,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setCurrentPage = (page: string) => {
     setCurrentPageState(page);
+    // Update browser URL for all pages
     if (page === 'admin') {
       window.history.pushState({}, '', '/admin-dashboard');
     } else if (page === 'account') {
       window.history.pushState({}, '', '/account');
-    } else if (window.location.pathname === '/admin-dashboard') {
+    } else if (page === 'checkout') {
+      window.history.pushState({}, '', '/checkout');
+    } else if (page === 'payment') {
+      window.history.pushState({}, '', '/payment');
+    } else if (page === 'orders') {
+      window.history.pushState({}, '', '/orders');
+    } else if (page === 'announcements') {
+      window.history.pushState({}, '', '/announcements');
+    } else if (page === 'shop') {
+      window.history.pushState({}, '', '/shop');
+    } else if (page === 'gallery') {
+      window.history.pushState({}, '', '/gallery');
+    } else if (page === 'contact') {
+      window.history.pushState({}, '', '/contact');
+    } else if (page === 'about') {
+      window.history.pushState({}, '', '/about');
+    } else if (page === 'practices') {
+      window.history.pushState({}, '', '/practices');
+    } else if (page === 'cart') {
+      window.history.pushState({}, '', '/cart');
+    } else if (page === 'login') {
+      window.history.pushState({}, '', '/login');
+    } else if (page === 'forgot-password') {
+      window.history.pushState({}, '', '/forgot-password');
+    } else if (page === 'reset-password') {
+      window.history.pushState({}, '', '/reset-password');
+    } else if (page === 'home') {
       window.history.pushState({}, '', '/');
-    } else if (window.location.pathname === '/account') {
+    }
+    // Handle going back to home from special pages
+    if (window.location.pathname === '/admin-dashboard' && page !== 'admin') {
+      window.history.pushState({}, '', '/');
+    } else if (window.location.pathname === '/account' && page !== 'account') {
       window.history.pushState({}, '', '/');
     }
   };

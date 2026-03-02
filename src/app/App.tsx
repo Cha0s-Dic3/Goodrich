@@ -103,6 +103,30 @@ function AppContent() {
         setCurrentPage('forgot-password');
       } else if (path === '/reset-password') {
         setCurrentPage('reset-password');
+      } else if (path === '/checkout') {
+        setCurrentPage('checkout');
+      } else if (path === '/payment') {
+        setCurrentPage('payment');
+      } else if (path === '/orders') {
+        setCurrentPage('orders');
+      } else if (path === '/announcements') {
+        setCurrentPage('announcements');
+      } else if (path === '/shop') {
+        setCurrentPage('shop');
+      } else if (path === '/gallery') {
+        setCurrentPage('gallery');
+      } else if (path === '/contact') {
+        setCurrentPage('contact');
+      } else if (path === '/about') {
+        setCurrentPage('about');
+      } else if (path === '/practices') {
+        setCurrentPage('practices');
+      } else if (path === '/cart') {
+        setCurrentPage('cart');
+      } else if (path === '/login') {
+        setCurrentPage('login');
+      } else if (path === '/') {
+        setCurrentPage('home');
       }
     };
     syncFromPath();
