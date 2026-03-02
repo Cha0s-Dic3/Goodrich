@@ -1627,13 +1627,19 @@ app.get('/api/admin/customers', async (req, res) => {
 
 if (NODE_ENV === 'production') {
   app.use(express.static(DIST_PATH));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
-      return next();
-    }
-    return res.sendFile(path.join(DIST_PATH, 'index.html'));
-  });
 }
+
+// SPA Fallback - serve index.html for all non-API routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+    return next();
+  }
+  if (NODE_ENV === 'production') {
+    return res.sendFile(path.join(DIST_PATH, 'index.html'));
+  }
+  // In development, only serve index.html if the file exists
+  return res.sendFile(path.join(DIST_PATH, 'index.html'));
+});
 
 app.use((err, req, res, next) => {
   if (!err) return next();
