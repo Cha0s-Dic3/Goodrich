@@ -90,8 +90,8 @@ export function PasswordResetsManagement() {
     }
   };
 
-  const deleteUsed = async (id: string) => {
-    if (!confirm('Delete this used reset request?')) return;
+  const deleteEntry = async (id: string, label: string) => {
+    if (!confirm(`Delete this ${label} reset request?`)) return;
     try {
       const res = await fetch(`/api/admin/password-resets/${id}`, {
         method: 'DELETE'
@@ -105,6 +105,40 @@ export function PasswordResetsManagement() {
     } catch (err: any) {
       toast.error(err?.message || 'Failed to delete reset request');
     }
+  };
+
+  const deleteAllExpiredAndNoAccount = async () => {
+    const toDelete = resets.filter(
+      (entry) =>
+        entry.hasAccount === false ||
+        !entry.token ||
+        (!entry.used && Number(entry.expiresAt) < now)
+    );
+    if (toDelete.length === 0) {
+      toast.info('No expired or no-account entries to delete.');
+      return;
+    }
+    if (!confirm(`Delete all ${toDelete.length} expired / no-account reset request(s)?`)) return;
+    let deleted = 0;
+    for (const entry of toDelete) {
+      try {
+        const res = await fetch(`/api/admin/password-resets/${entry.id}`, { method: 'DELETE' });
+        if (res.ok) deleted++;
+      } catch {
+        // continue
+      }
+    }
+    setResets((prev) =>
+      prev.filter(
+        (entry) =>
+          !(
+            entry.hasAccount === false ||
+            !entry.token ||
+            (!entry.used && Number(entry.expiresAt) < now)
+          )
+      )
+    );
+    toast.success(`Deleted ${deleted} expired / no-account request(s).`);
   };
 
   const renderStatus = (entry: ResetEntry) => {
@@ -124,9 +158,9 @@ export function PasswordResetsManagement() {
   };
 
   const formatDate = (value?: string | number) => {
-    if (!value) return '—';
+    if (!value) return 'ï¿½';
     const date = typeof value === 'number' ? new Date(value) : new Date(value);
-    if (Number.isNaN(date.getTime())) return '—';
+    if (Number.isNaN(date.getTime())) return 'ï¿½';
     return date.toLocaleString();
   };
 
@@ -137,7 +171,16 @@ export function PasswordResetsManagement() {
           <h2 className="text-3xl text-[#3D2817]">Password Reset Requests</h2>
           <p className="text-sm text-[#6B5344]">Admin sends reset codes to users.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={deleteAllExpiredAndNoAccount}
+            className="border-2 border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete All Expired / No Account
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -219,9 +262,9 @@ export function PasswordResetsManagement() {
         <div className="divide-y divide-[#F0EAD6]">
           {filtered.map((entry) => (
             <div key={entry.id} className="grid grid-cols-1 md:grid-cols-7 gap-4 py-4 text-sm">
-              <div className="text-[#3D2817] break-all">{entry.email || '—'}</div>
-              <div className="text-[#6B5344]">{entry.name || '—'}</div>
-              <div className="text-[#3D2817] font-semibold tracking-wide">{entry.token || '—'}</div>
+              <div className="text-[#3D2817] break-all">{entry.email || 'ï¿½'}</div>
+              <div className="text-[#6B5344]">{entry.name || 'ï¿½'}</div>
+              <div className="text-[#3D2817] font-semibold tracking-wide">{entry.token || 'ï¿½'}</div>
               <div>{renderStatus(entry)}</div>
               <div className="text-[#6B5344]">{formatDate(entry.createdAt)}</div>
               <div className="text-[#6B5344]">{formatDate(entry.expiresAt)}</div>
@@ -253,8 +296,18 @@ export function PasswordResetsManagement() {
                   size="sm"
                   variant="outline"
                   className="border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
-                  onClick={() => deleteUsed(entry.id)}
-                  disabled={!entry.used}
+                  onClick={() => {
+                    const isNoAccount = entry.hasAccount === false || !entry.token;
+                    const isExpired = !entry.used && Number(entry.expiresAt) < now;
+                    const label = entry.used ? 'used' : isNoAccount ? 'no-account' : isExpired ? 'expired' : 'pending';
+                    deleteEntry(entry.id, label);
+                  }}
+                  disabled={
+                    !entry.used &&
+                    entry.hasAccount !== false &&
+                    !!entry.token &&
+                    Number(entry.expiresAt) >= now
+                  }
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete

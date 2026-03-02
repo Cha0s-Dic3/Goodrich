@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 export function PaymentsManagement() {
   const { payments, loadPayments } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [isRetrying, setIsRetrying] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -47,24 +46,7 @@ export function PaymentsManagement() {
     { value: 'retried', label: 'Retried' }
   ];
 
-  const handleAdminRetry = async (ref: string) => {
-    if (isRetrying) return;
-    setIsRetrying(ref);
-    try {
-      const res = await fetch(`/api/admin/payments/retry/${ref}`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to retry payment');
-      }
-      toast.success(`Retry started. New ref: ${data.ref}`);
-      await loadPayments('admin');
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to retry payment');
-    } finally {
-      setIsRetrying(null);
-    }
-  };
-
+  
   const handleApprove = async (id: string) => {
     if (isUpdating) return;
     setIsUpdating(id);
@@ -205,17 +187,6 @@ export function PaymentsManagement() {
                         Retried
                       </span>
                     )}
-                    {payment.status === 'failed' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-[#C41E3A] text-[#C41E3A] hover:bg-[#C41E3A] hover:text-white"
-                        onClick={() => handleAdminRetry(payment.ref)}
-                        disabled={isRetrying === payment.ref}
-                      >
-                        Retry
-                      </Button>
-                    )}
                     {payment.status === 'pending-approval' && (
                       <>
                         <Button
@@ -288,3 +259,5 @@ export function PaymentsManagement() {
     </div>
   );
 }
+
+

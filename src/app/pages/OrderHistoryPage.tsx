@@ -15,7 +15,6 @@ export function OrderHistoryPage() {
     setCurrentPage,
     loadOrders,
     loadPayments,
-    retryPayment,
     isUserLoggedIn,
     clearOrderHistory
   } = useApp();
@@ -74,18 +73,8 @@ export function OrderHistoryPage() {
     }
   };
 
-  const handleRetryPayment = async (ref: string) => {
-    try {
-      const newRef = await retryPayment(ref);
-      toast.success(t('orders.retryStarted', { ref: newRef }));
-    } catch (err: any) {
-      toast.error(err?.message || t('orders.retryFailed'));
-    }
-  };
-
+  
   const visiblePayments = payments.filter((payment) => !payment.orderId);
-  const canRetry = (payment: typeof payments[number]) =>
-    payment.status === 'failed' && payment.method !== 'manual-momo';
 
   return (
     <div className="min-h-screen bg-[#FFFDD0]">
@@ -129,18 +118,6 @@ export function OrderHistoryPage() {
                         <p className="text-xs text-[#6B5344]">
                           {t('orders.expires')}: {new Date(payment.expiresAt).toLocaleTimeString(locale)}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      {canRetry(payment) && (
-                        <Button
-                          size="sm"
-                          className="bg-[#C41E3A] hover:bg-[#FF6B6B] text-white"
-                          onClick={() => handleRetryPayment(payment.ref)}
-                          disabled={payment.status === 'successful'}
-                        >
-                          {t('orders.retryPayment')}
-                        </Button>
                       )}
                     </div>
                   </div>
@@ -263,7 +240,6 @@ export function OrderHistoryPage() {
                           {order.paymentStatus && (
                             <p className="text-xs text-[#6B5344] mt-1">
                               Payment: {order.paymentStatus}
-                              {order.paypackRef ? ` (${order.paypackRef})` : ''}
                             </p>
                           )}
                         </div>
@@ -409,3 +385,6 @@ export function OrderHistoryPage() {
     </div>
   );
 }
+
+
+

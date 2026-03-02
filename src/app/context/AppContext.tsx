@@ -35,7 +35,6 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'processing' | 'out-for-delivery' | 'delivered' | 'cancelled';
   createdAt: string;
   notes?: string;
-  paypackRef?: string;
   paymentStatus?: string;
 }
 
@@ -120,6 +119,9 @@ interface AppContextType {
   products: Product[];
   refreshProducts: () => Promise<void>;
   updateProduct: (productId: string, updates: Partial<Product>) => Promise<void>;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
+  uploadProductImage: (file: File) => Promise<string>;
 
   // Cart
   cart: CartItem[];
@@ -139,7 +141,6 @@ interface AppContextType {
   // Payments
   payments: PendingPayment[];
   loadPayments: (scope: 'user' | 'admin') => Promise<void>;
-  retryPayment: (ref: string) => Promise<string>;
 
   // Customers
   customers: Customer[];
@@ -333,6 +334,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setProducts(prev => prev.map(p => (p.id === productId ? data.product : p)));
   };
 
+  const addProduct = async (product: Omit<Product, 'id'>) => {
+    const data = await fetchJson('/api/admin/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...product, lang: language })
+    });
+    setProducts(prev => [data.product, ...prev]);
+  };
+
+  const deleteProduct = async (productId: string) => {
+    await fetchJson(`/api/admin/products/${productId}`, { method: 'DELETE' });
+    setProducts(prev => prev.filter(p => p.id !== productId));
+  };
+
+  const uploadProductImage = async (file: File) => {
+    return uploadFile('/api/uploads/product', file);
+  };
+
   const refreshAnnouncements = async () => {
     try {
       const data = await fetchJson(`/api/announcements?lang=${language}`);
@@ -469,20 +488,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const retryPayment = async (ref: string) => {
-    if (!authToken) {
-      throw new Error('Please log in first');
-    }
-    const data = await fetchJson(`/api/paypack/retry/${ref}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${authToken}`
-      }
-    });
-    await loadPayments('user');
-    return data.ref as string;
-  };
-
+  
   const addOrder = async (order: Omit<Order, 'id' | 'createdAt'>) => {
     if (!authToken) {
       return null;
@@ -649,6 +655,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         products,
         refreshProducts,
         updateProduct,
+        addProduct,
+        deleteProduct,
+        uploadProductImage,
         cart,
         addToCart,
         removeFromCart,
@@ -662,7 +671,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clearOrderHistory,
         payments,
         loadPayments,
-        retryPayment,
         customers,
         loadCustomers,
         announcements,
@@ -711,3 +719,4 @@ export function useApp() {
   }
   return context;
 }
+

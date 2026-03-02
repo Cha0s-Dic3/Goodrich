@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,24 +18,13 @@ const DATA_PATH = path.join(__dirname, 'data.json');
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DIST_PATH = path.join(__dirname, '../dist');
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 5175;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:2007/goodrich';
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'goodrich';
 const MONGODB_ENABLED = String(process.env.MONGODB_ENABLED || 'true').toLowerCase() === 'true';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
-const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || '';
-const FIREBASE_PRIVATE_KEY = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || '';
-const FIREBASE_USE_DB = String(process.env.FIREBASE_USE_DB || '').toLowerCase() === 'true';
-const USE_FIREBASE_STORAGE = Boolean(
-  FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY && FIREBASE_STORAGE_BUCKET
-);
-const USE_FIREBASE_DB = Boolean(FIREBASE_USE_DB && FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY);
-const PAYPACK_CLIENT_ID = process.env.PAYPACK_CLIENT_ID || '';
-const PAYPACK_CLIENT_SECRET = process.env.PAYPACK_CLIENT_SECRET || '';
-const PAYPACK_WEBHOOK_SECRET = process.env.PAYPACK_WEBHOOK_SECRET || '';
-const PAYPACK_WEBHOOK_MODE = process.env.PAYPACK_WEBHOOK_MODE || 'production';
+const CLOUDINARY_URL = process.env.CLOUDINARY_URL || '';
 const APP_BASE_URL = process.env.APP_BASE_URL || '';
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
@@ -43,13 +33,15 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+if (CLOUDINARY_URL) {
+  cloudinary.config({ secure: true });
+}
 
 const ensureMongoConnected = async () => {
   if (!MONGODB_ENABLED) return;
   if (mongoose.connection.readyState === 1) return;
-  await mongoose.connect(MONGODB_URI);
+  await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME });
 };
 
 const connectMongo = async () => {
@@ -87,90 +79,8 @@ app.use(
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const buildUploadUrl = (filePath) => `/uploads/${filePath.replace(/\\/g, '/')}`;
-const FIREBASE_STORAGE_URL_PREFIX = FIREBASE_STORAGE_BUCKET
-  ? `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o/`
-  : '';
-const FIREBASE_GCS_URL_PREFIX = FIREBASE_STORAGE_BUCKET
-  ? `https://storage.googleapis.com/${FIREBASE_STORAGE_BUCKET}/`
-  : '';
-let firebaseBucketCache = null;
-let firebaseFirestoreCache = null;
-let firebaseImportAttempted = false;
-let paypackClientCache = null;
-let paypackImportAttempted = false;
 let mailerCache = null;
 
-const getFirebaseBucket = async () => {
-  if (!USE_FIREBASE_STORAGE) return null;
-  if (firebaseBucketCache) return firebaseBucketCache;
-  try {
-    const admin = (await import('firebase-admin')).default;
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: FIREBASE_PROJECT_ID,
-          clientEmail: FIREBASE_CLIENT_EMAIL,
-          privateKey: FIREBASE_PRIVATE_KEY
-        }),
-        storageBucket: FIREBASE_STORAGE_BUCKET
-      });
-    }
-    firebaseBucketCache = admin.storage().bucket();
-    return firebaseBucketCache;
-  } catch (err) {
-    if (!firebaseImportAttempted) {
-      console.error('Firebase Storage package/config missing. Falling back to local uploads.');
-      firebaseImportAttempted = true;
-    }
-    return null;
-  }
-};
-
-const getFirebaseFirestore = async () => {
-  if (!USE_FIREBASE_DB) return null;
-  if (firebaseFirestoreCache) return firebaseFirestoreCache;
-  try {
-    const admin = (await import('firebase-admin')).default;
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: FIREBASE_PROJECT_ID,
-          clientEmail: FIREBASE_CLIENT_EMAIL,
-          privateKey: FIREBASE_PRIVATE_KEY
-        }),
-        storageBucket: FIREBASE_STORAGE_BUCKET || undefined
-      });
-    }
-    firebaseFirestoreCache = admin.firestore();
-    return firebaseFirestoreCache;
-  } catch (err) {
-    if (!firebaseImportAttempted) {
-      console.error('Firebase Firestore package/config missing. Falling back to file data store.');
-      firebaseImportAttempted = true;
-    }
-    return null;
-  }
-};
-
-const getPaypackClient = async () => {
-  if (!PAYPACK_CLIENT_ID || !PAYPACK_CLIENT_SECRET) return null;
-  if (paypackClientCache) return paypackClientCache;
-  try {
-    const module = await import('paypack-js');
-    const Paypack = module.default || module;
-    paypackClientCache = new Paypack({
-      client_id: PAYPACK_CLIENT_ID,
-      client_secret: PAYPACK_CLIENT_SECRET
-    });
-    return paypackClientCache;
-  } catch (err) {
-    if (!paypackImportAttempted) {
-      console.error('Paypack SDK not available. Payment requests will fail.');
-      paypackImportAttempted = true;
-    }
-    return null;
-  }
-};
 
 const getMailer = () => {
   if (mailerCache) return mailerCache;
@@ -201,34 +111,30 @@ const resolveUploadFilePath = (urlValue) => {
   return path.join(UPLOADS_DIR, normalized);
 };
 
-const resolveFirebaseObjectName = (urlValue) => {
-  if (!USE_FIREBASE_STORAGE || typeof urlValue !== 'string') {
+const extractCloudinaryPublicId = (urlValue) => {
+  if (typeof urlValue !== 'string' || !urlValue.includes('/upload/')) {
     return null;
   }
-  if (FIREBASE_STORAGE_URL_PREFIX && urlValue.startsWith(FIREBASE_STORAGE_URL_PREFIX)) {
-    const tail = urlValue.slice(FIREBASE_STORAGE_URL_PREFIX.length);
-    const objectPart = tail.split('?')[0];
-    return decodeURIComponent(objectPart);
-  }
-  if (FIREBASE_GCS_URL_PREFIX && urlValue.startsWith(FIREBASE_GCS_URL_PREFIX)) {
-    const tail = urlValue.slice(FIREBASE_GCS_URL_PREFIX.length);
-    const objectPart = tail.split('?')[0];
-    return decodeURIComponent(objectPart);
-  }
-  return null;
+  const withoutQuery = urlValue.split('?')[0];
+  const uploadPart = withoutQuery.split('/upload/')[1];
+  if (!uploadPart) return null;
+  const segments = uploadPart.split('/');
+  const versionIndex = segments.findIndex((seg) => /^v\d+$/.test(seg));
+  const publicSegments = versionIndex >= 0 ? segments.slice(versionIndex + 1) : segments;
+  if (publicSegments.length === 0) return null;
+  const last = publicSegments[publicSegments.length - 1];
+  publicSegments[publicSegments.length - 1] = last.replace(/\.[^.]+$/, '');
+  return publicSegments.join('/');
 };
 
 const deleteUploadIfExists = async (urlValue) => {
-  const firebaseObjectName = resolveFirebaseObjectName(urlValue);
-  if (firebaseObjectName) {
-    const bucket = await getFirebaseBucket();
-    if (bucket) {
-      try {
-        await bucket.file(firebaseObjectName).delete({ ignoreNotFound: true });
-      } catch (err) {
-        console.error('Failed to delete Firebase object:', err.message);
-      }
+  const cloudinaryPublicId = extractCloudinaryPublicId(urlValue);
+  if (cloudinaryPublicId && CLOUDINARY_URL) {
+    try {
+      await cloudinary.uploader.destroy(cloudinaryPublicId, { resource_type: 'image' });
       return;
+    } catch (err) {
+      console.error('Failed to delete Cloudinary asset:', err?.message || err);
     }
   }
 
@@ -258,28 +164,26 @@ const createUploader = () =>
   });
 
 const saveUploadedFile = async (subDir, file) => {
-  const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-  const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-  const key = `${subDir}/${filename}`;
-
-  const bucket = await getFirebaseBucket();
-  if (bucket) {
-    const token = crypto.randomUUID();
-    const objectRef = bucket.file(key);
-    await objectRef.save(file.buffer, {
-      metadata: {
-        contentType: file.mimetype || 'application/octet-stream',
-        metadata: { firebaseStorageDownloadTokens: token }
-      }
+  if (CLOUDINARY_URL) {
+    const folder = `goodrich/${subDir}`;
+    const uploaded = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder, resource_type: 'image' },
+        (error, result) => {
+          if (error) return reject(error);
+          return resolve(result);
+        }
+      );
+      stream.end(file.buffer);
     });
-    const encodedKey = encodeURIComponent(key);
-    const url = `${FIREBASE_STORAGE_URL_PREFIX}${encodedKey}?alt=media&token=${token}`;
-    return { url, key };
+    return { url: uploaded.secure_url, key: uploaded.public_id };
   }
 
-  const targetDir = path.join(UPLOADS_DIR, subDir);
-  await fs.mkdir(targetDir, { recursive: true });
-  const targetPath = path.join(targetDir, filename);
+  const ext = path.extname(file?.originalname || '') || '.bin';
+  const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
+  const key = path.join(subDir, filename);
+  const targetPath = path.join(UPLOADS_DIR, key);
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, file.buffer);
   return { url: buildUploadUrl(key), key };
 };
@@ -290,6 +194,7 @@ const ensureUploadsDir = async () => {
 
 const avatarUpload = createUploader();
 const galleryUpload = createUploader();
+const productUpload = createUploader();
 
 const emptyData = () => ({
   users: [],
@@ -388,7 +293,6 @@ const orderSchema = new mongoose.Schema(
     deliveryTimeWindow: { type: String, default: '' },
     status: { type: String, default: 'pending', index: true },
     notes: { type: String, default: '' },
-    paypackRef: { type: String },
     paymentStatus: { type: String },
     createdAt: { type: String, default: '' },
     updatedAt: { type: String }
@@ -597,50 +501,6 @@ const saveDataToFiles = async (data) => {
   );
 };
 
-const FIRESTORE_COLLECTION = 'goodrich_data_parts';
-
-const loadDataFromFirestore = async () => {
-  const db = await getFirebaseFirestore();
-  if (!db) {
-    return loadDataFromFiles();
-  }
-  const data = {};
-  let hasAnyData = false;
-  for (const part of DATA_PARTS) {
-    const doc = await db.collection(FIRESTORE_COLLECTION).doc(part).get();
-    const value = doc.exists ? doc.data()?.value : [];
-    data[part] = Array.isArray(value) ? value : [];
-    if (Array.isArray(data[part]) && data[part].length > 0) {
-      hasAnyData = true;
-    }
-  }
-  if (!hasAnyData) {
-    const fallback = await loadDataFromFiles();
-    const hasFallbackData = DATA_PARTS.some(
-      (part) => Array.isArray(fallback[part]) && fallback[part].length > 0
-    );
-    if (hasFallbackData) {
-      await saveDataToFirestore(fallback);
-      return fallback;
-    }
-  }
-  return normalizeData(data);
-};
-
-const saveDataToFirestore = async (data) => {
-  const db = await getFirebaseFirestore();
-  if (!db) {
-    return saveDataToFiles(data);
-  }
-  const normalized = normalizeData(data);
-  const batch = db.batch();
-  DATA_PARTS.forEach((part) => {
-    const ref = db.collection(FIRESTORE_COLLECTION).doc(part);
-    batch.set(ref, { value: normalized[part] || [], updatedAt: new Date().toISOString() });
-  });
-  await batch.commit();
-};
-
 const stripMongoMeta = (item) => {
   if (!item || typeof item !== 'object') return item;
   const { _id, __v, ...rest } = item;
@@ -702,18 +562,12 @@ const loadData = async () => {
   if (MONGODB_ENABLED) {
     return loadDataFromMongo();
   }
-  if (USE_FIREBASE_DB) {
-    return loadDataFromFirestore();
-  }
   return loadDataFromFiles();
 };
 
 const saveData = async (data) => {
   if (MONGODB_ENABLED) {
     return saveDataToMongo(data);
-  }
-  if (USE_FIREBASE_DB) {
-    return saveDataToFirestore(data);
   }
   return saveDataToFiles(data);
 };
@@ -881,10 +735,6 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     notes: overrides.notes ?? payload.notes ?? '',
     createdAt: new Date().toISOString()
   };
-
-  if (overrides.paypackRef) {
-    order.paypackRef = overrides.paypackRef;
-  }
   if (overrides.paymentStatus) {
     order.paymentStatus = overrides.paymentStatus;
   }
@@ -932,71 +782,7 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.head('/api/paypack/webhook', (req, res) => {
-  res.status(200).end();
-});
 
-app.post('/api/paypack/webhook', async (req, res) => {
-  const signature = req.get('X-Paypack-Signature') || '';
-  if (!PAYPACK_WEBHOOK_SECRET) {
-    return res.status(500).json({ error: 'Webhook secret not configured' });
-  }
-  if (!signature) {
-    return res.status(400).json({ error: 'Missing signature header' });
-  }
-  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-  const expected = crypto
-    .createHmac('sha256', PAYPACK_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest('base64');
-  const signatureValid =
-    signature.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  if (!signatureValid) {
-    return res.status(400).json({ error: 'Invalid signature' });
-  }
-
-  const payload = req.body || {};
-  const data = payload.data || {};
-  const ref = data.ref;
-  const status = data.status;
-  if (!ref) {
-    return res.status(200).json({ ok: true });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending) {
-    return res.status(200).json({ ok: true });
-  }
-
-  pending.status = status || pending.status || 'pending';
-  pending.updatedAt = new Date().toISOString();
-
-  if (status === 'successful' && !pending.orderId) {
-    const user = store.users.find((entry) => entry.id === pending.userId);
-    if (user) {
-      const orderPayload = pending.orderPayload || {};
-      const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Provider: ${data.provider || ''} | Ref: ${ref}`.trim();
-      try {
-        const order = createOrderRecord(store, user, orderPayload, {
-          status: 'confirmed',
-          paypackRef: ref,
-          paymentStatus: status,
-          totalAmount: pending.subtotal,
-          deliveryFee: pending.deliveryFee,
-          notes
-        });
-        pending.orderId = order.id;
-      } catch (err) {
-        pending.failureReason = err?.message || 'Failed to finalize order';
-      }
-    }
-  }
-
-  await saveData(store);
-  return res.status(200).json({ ok: true });
-});
 
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body || {};
@@ -1056,206 +842,8 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/paypack/cashin', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
 
-  const payload = req.body?.order || req.body || {};
-  const phone = payload.customerPhone || payload.phone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
 
-  const store = await loadData();
-  const user = store.users.find((entry) => entry.id === req.userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  let items;
-  try {
-    items = buildOrderItems(payload.items, store.products);
-  } catch (err) {
-    return res.status(400).json({ error: 'Order items required' });
-  }
-
-  const deliveryZone =
-    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
-      ? payload.deliveryZone
-      : 'local';
-  const deliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
-  const subtotal = items.reduce(
-    (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
-    0
-  );
-  const amount = subtotal + deliveryFee;
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const ref = tx?.ref;
-    if (!ref) {
-      throw new Error('Missing transaction reference');
-    }
-
-    const pending = {
-      id: nextId('PAY', store.pendingPayments),
-      ref,
-      status: tx?.status || 'pending',
-      amount,
-      subtotal,
-      deliveryFee,
-      userId: user.id,
-      customerId: user.customerId,
-      orderPayload: {
-        items: payload.items,
-        customerName: payload.customerName || user.name,
-        customerPhone: payload.customerPhone || user.phone || '',
-        customerEmail: payload.customerEmail || user.email,
-        deliveryAddress: payload.deliveryAddress || '',
-        deliveryDate: payload.deliveryDate || '',
-        deliveryTimeWindow: payload.deliveryTimeWindow || '',
-        deliveryZone,
-        notes: payload.notes || ''
-      },
-      createdAt: new Date().toISOString()
-    };
-
-    store.pendingPayments.unshift(pending);
-    await saveData(store);
-
-    return res.json({
-      ref,
-      status: pending.status,
-      amount
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to initiate payment' });
-  }
-});
-
-app.post('/api/paypack/retry/:ref', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending || pending.userId !== req.userId) {
-    return res.status(404).json({ error: 'Pending payment not found' });
-  }
-  if (pending.status === 'successful') {
-    return res.status(400).json({ error: 'Payment already successful' });
-  }
-
-  const orderPayload = pending.orderPayload || {};
-  const phone = orderPayload.customerPhone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount: pending.amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const newRef = tx?.ref;
-    if (!newRef) {
-      throw new Error('Missing transaction reference');
-    }
-
-    pending.status = 'retried';
-    pending.updatedAt = new Date().toISOString();
-    pending.retriedTo = newRef;
-
-    const retryEntry = {
-      ...pending,
-      id: nextId('PAY', store.pendingPayments),
-      ref: newRef,
-      status: tx?.status || 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: undefined,
-      retriedFrom: ref,
-      retriedTo: undefined,
-      orderId: undefined
-    };
-
-    store.pendingPayments.unshift(retryEntry);
-    await saveData(store);
-    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
-  }
-});
-
-app.get('/api/paypack/transactions/:ref', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  try {
-    const txRes = await paypack.transaction(ref);
-    const tx = txRes?.data || txRes;
-
-    const store = await loadData();
-    const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-    let order = null;
-
-    if (pending && tx?.status) {
-      pending.status = tx.status;
-      pending.updatedAt = new Date().toISOString();
-
-      if (tx.status === 'successful' && !pending.orderId) {
-        const user = store.users.find((entry) => entry.id === pending.userId);
-        if (user) {
-          const orderPayload = pending.orderPayload || {};
-          const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Ref: ${ref}`.trim();
-          try {
-            order = createOrderRecord(store, user, orderPayload, {
-              status: 'confirmed',
-              paypackRef: ref,
-              paymentStatus: tx.status,
-              totalAmount: pending.subtotal,
-              deliveryFee: pending.deliveryFee,
-              notes
-            });
-            pending.orderId = order.id;
-          } catch (err) {
-            pending.failureReason = err?.message || 'Failed to finalize order';
-          }
-        }
-      }
-
-      if (tx.status === 'failed') {
-        pending.failureReason = tx?.message || pending.failureReason || '';
-      }
-
-      await saveData(store);
-    }
-
-    return res.json({ transaction: tx, order });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch transaction' });
-  }
-});
 
 app.get('/api/payments/my', authMiddleware, async (req, res) => {
   const data = await loadData();
@@ -1326,66 +914,6 @@ app.get('/api/admin/payments', async (req, res) => {
   res.json({ payments: paginateList(data.pendingPayments, req) });
 });
 
-app.post('/api/admin/payments/retry/:ref', async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending) {
-    return res.status(404).json({ error: 'Pending payment not found' });
-  }
-  if (pending.status === 'successful') {
-    return res.status(400).json({ error: 'Payment already successful' });
-  }
-
-  const orderPayload = pending.orderPayload || {};
-  const phone = orderPayload.customerPhone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount: pending.amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const newRef = tx?.ref;
-    if (!newRef) {
-      throw new Error('Missing transaction reference');
-    }
-
-    pending.status = 'retried';
-    pending.updatedAt = new Date().toISOString();
-    pending.retriedTo = newRef;
-
-    const retryEntry = {
-      ...pending,
-      id: nextId('PAY', store.pendingPayments),
-      ref: newRef,
-      status: tx?.status || 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: undefined,
-      retriedFrom: ref,
-      retriedTo: undefined,
-      orderId: undefined
-    };
-
-    store.pendingPayments.unshift(retryEntry);
-    await saveData(store);
-    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
-  }
-});
 
 app.post('/api/admin/payments/approve/:id', async (req, res) => {
   const { id } = req.params;
@@ -1414,7 +942,6 @@ app.post('/api/admin/payments/approve/:id', async (req, res) => {
   try {
     order = createOrderRecord(store, user, payment.orderPayload || {}, {
       status: 'confirmed',
-      paypackRef: payment.ref,
       paymentStatus: 'approved',
       totalAmount: payment.subtotal,
       deliveryFee: payment.deliveryFee,
@@ -1536,19 +1063,24 @@ app.post('/api/auth/reset-password', async (req, res) => {
   const data = await loadData();
   const emailLower = String(email).toLowerCase();
   const reset = data.passwordResets.find((entry) => {
-    if (!entry || entry.used || !entry.token || entry.token !== token) return false;
-    if (entry.expiresAt < Date.now()) return false;
+    if (!entry || !entry.token || entry.token !== token) return false;
     if (entry.email && String(entry.email).toLowerCase() === emailLower) return true;
     const user = data.users.find((item) => item.id === entry.userId);
     return user?.email && String(user.email).toLowerCase() === emailLower;
   });
-  if (!reset || reset.expiresAt < Date.now()) {
-    return res.status(400).json({ error: 'Reset token is invalid or expired' });
+  if (!reset) {
+    return res.status(400).json({ error: 'Reset token is invalid', code: 'RESET_INVALID' });
+  }
+  if (reset.used) {
+    return res.status(400).json({ error: 'Reset token is already used', code: 'RESET_USED' });
+  }
+  if (reset.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Reset token is expired', code: 'RESET_EXPIRED' });
   }
 
   const user = data.users.find((entry) => entry.id === reset.userId);
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    return res.status(404).json({ error: 'No account found for that email', code: 'NO_ACCOUNT' });
   }
 
   user.passwordHash = await bcrypt.hash(String(password), 10);
@@ -1655,6 +1187,19 @@ app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) 
     return res.json({ url: stored.url });
   } catch (err) {
     console.error('Gallery upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
+  }
+});
+
+app.post('/api/uploads/product', productUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  try {
+    const stored = await saveUploadedFile('products', req.file);
+    return res.json({ url: stored.url });
+  } catch (err) {
+    console.error('Product image upload failed:', err?.message || err);
     return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
@@ -1783,6 +1328,49 @@ app.patch('/api/admin/products/:id', async (req, res) => {
   }
   await saveData(data);
   return res.json({ product: localizeProduct(product, language) });
+});
+
+app.post('/api/admin/products', async (req, res) => {
+  const payload = req.body || {};
+  const language = sanitizeLanguage(payload.lang);
+  const normalizedName = mergeLocalizedText({}, payload.name, language);
+  const normalizedDescription = mergeLocalizedText({}, payload.description, language);
+  if (!resolveLocalizedText(normalizedName, language)) {
+    return res.status(400).json({ error: 'Product name is required' });
+  }
+
+  const data = await loadData();
+  const product = {
+    id: nextId('PROD', data.products),
+    name: normalizedName,
+    description: normalizedDescription,
+    price: Number(payload.price || 0),
+    category: payload.category || 'eggs',
+    imageUrl: payload.imageUrl || '',
+    images: Array.isArray(payload.images) ? payload.images : [],
+    unit: payload.unit || '',
+    stock: Number(payload.stock || 0),
+    size: payload.size || 'medium',
+    quantity: Number(payload.quantity || 30),
+    isActive: payload.isActive !== false,
+    createdAt: new Date().toISOString()
+  };
+
+  data.products.unshift(product);
+  await saveData(data);
+  return res.json({ product: localizeProduct(product, language) });
+});
+
+app.delete('/api/admin/products/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = await loadData();
+  const index = data.products.findIndex((entry) => entry.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  data.products.splice(index, 1);
+  await saveData(data);
+  return res.json({ ok: true });
 });
 
 app.get('/api/announcements', async (req, res) => {
@@ -1949,85 +1537,6 @@ app.delete('/api/admin/messages/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/chat', async (req, res) => {
-  if (!GROQ_API_KEY) {
-    return res.status(500).json({ error: 'Chat assistant is not configured' });
-  }
-
-  const body = req.body || {};
-  const message = typeof body.message === 'string' ? body.message.trim() : '';
-  const currentPage = typeof body.currentPage === 'string' ? body.currentPage : 'home';
-  const language = typeof body.language === 'string' ? body.language : 'en';
-  const cartItems = Number.isFinite(Number(body.cartItems)) ? Number(body.cartItems) : 0;
-
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-  if (message.length > 1500) {
-    return res.status(400).json({ error: 'Message is too long' });
-  }
-
-  try {
-    const data = await loadData();
-    const productHints = (data.products || [])
-      .slice(0, 6)
-      .map((p) => {
-        const productName = resolveLocalizedText(p?.name, language);
-        return `${productName || 'Product'} (${Number(p?.price || 0)} FRW)`;
-      })
-      .join(', ');
-    const latestAnnouncement = data.announcements?.[0]
-      ? resolveLocalizedText(data.announcements[0]?.title, language)
-      : '';
-
-    const systemPrompt =
-      'You are the support assistant for HABAKURAMA Jean Dieu poultry app. ' +
-      'Be concise, practical, and app-specific. Help with products, cart, checkout, payment, account, orders, and contact. ' +
-      'If user asks outside app scope, politely redirect to app-relevant help. ' +
-      'Never invent prices or policies not in context.';
-
-    const contextPrompt =
-      `Context: page=${currentPage}, language=${language}, cartItems=${cartItems}. ` +
-      `Known products: ${productHints || 'none'}. ` +
-      `Latest announcement: ${latestAnnouncement || 'none'}.`;
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0.4,
-        max_tokens: 350,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'system', content: contextPrompt },
-          { role: 'user', content: message }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const failureText = await response.text();
-      return res.status(502).json({
-        error: 'Chat provider request failed',
-        detail: failureText.slice(0, 300)
-      });
-    }
-
-    const payload = await response.json();
-    const reply = payload?.choices?.[0]?.message?.content;
-    if (!reply || typeof reply !== 'string') {
-      return res.status(502).json({ error: 'Invalid chat provider response' });
-    }
-    return res.json({ reply });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Chat assistant failed' });
-  }
-});
-
 app.post('/api/orders', authMiddleware, async (req, res) => {
   const payload = req.body || {};
   const data = await loadData();
@@ -2149,3 +1658,6 @@ if (!runningInFunction) {
 
 export { app };
 export default app;
+
+
+

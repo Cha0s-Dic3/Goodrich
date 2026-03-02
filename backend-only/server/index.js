@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const DATA_PATH = path.join(__dirname, 'data.json');
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 5175;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:2007/goodrich';
 const MONGODB_ENABLED = String(process.env.MONGODB_ENABLED || 'true').toLowerCase() === 'true';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -30,10 +30,6 @@ const USE_FIREBASE_STORAGE = Boolean(
   FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY && FIREBASE_STORAGE_BUCKET
 );
 const USE_FIREBASE_DB = Boolean(FIREBASE_USE_DB && FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY);
-const PAYPACK_CLIENT_ID = process.env.PAYPACK_CLIENT_ID || '';
-const PAYPACK_CLIENT_SECRET = process.env.PAYPACK_CLIENT_SECRET || '';
-const PAYPACK_WEBHOOK_SECRET = process.env.PAYPACK_WEBHOOK_SECRET || '';
-const PAYPACK_WEBHOOK_MODE = process.env.PAYPACK_WEBHOOK_MODE || 'production';
 const APP_BASE_URL = process.env.APP_BASE_URL || '';
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
@@ -42,8 +38,6 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 
 const ensureMongoConnected = async () => {
   if (!MONGODB_ENABLED) return;
@@ -95,8 +89,6 @@ const FIREBASE_GCS_URL_PREFIX = FIREBASE_STORAGE_BUCKET
 let firebaseBucketCache = null;
 let firebaseFirestoreCache = null;
 let firebaseImportAttempted = false;
-let paypackClientCache = null;
-let paypackImportAttempted = false;
 let mailerCache = null;
 
 const getFirebaseBucket = async () => {
@@ -151,25 +143,6 @@ const getFirebaseFirestore = async () => {
   }
 };
 
-const getPaypackClient = async () => {
-  if (!PAYPACK_CLIENT_ID || !PAYPACK_CLIENT_SECRET) return null;
-  if (paypackClientCache) return paypackClientCache;
-  try {
-    const module = await import('paypack-js');
-    const Paypack = module.default || module;
-    paypackClientCache = new Paypack({
-      client_id: PAYPACK_CLIENT_ID,
-      client_secret: PAYPACK_CLIENT_SECRET
-    });
-    return paypackClientCache;
-  } catch (err) {
-    if (!paypackImportAttempted) {
-      console.error('Paypack SDK not available. Payment requests will fail.');
-      paypackImportAttempted = true;
-    }
-    return null;
-  }
-};
 
 const getMailer = () => {
   if (mailerCache) return mailerCache;
@@ -289,6 +262,7 @@ const ensureUploadsDir = async () => {
 
 const avatarUpload = createUploader();
 const galleryUpload = createUploader();
+const productUpload = createUploader();
 
 const emptyData = () => ({
   users: [],
@@ -387,7 +361,6 @@ const orderSchema = new mongoose.Schema(
     deliveryTimeWindow: { type: String, default: '' },
     status: { type: String, default: 'pending', index: true },
     notes: { type: String, default: '' },
-    paypackRef: { type: String },
     paymentStatus: { type: String },
     createdAt: { type: String, default: '' },
     updatedAt: { type: String }
@@ -880,10 +853,6 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     notes: overrides.notes ?? payload.notes ?? '',
     createdAt: new Date().toISOString()
   };
-
-  if (overrides.paypackRef) {
-    order.paypackRef = overrides.paypackRef;
-  }
   if (overrides.paymentStatus) {
     order.paymentStatus = overrides.paymentStatus;
   }
@@ -931,71 +900,7 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
-app.head('/api/paypack/webhook', (req, res) => {
-  res.status(200).end();
-});
 
-app.post('/api/paypack/webhook', async (req, res) => {
-  const signature = req.get('X-Paypack-Signature') || '';
-  if (!PAYPACK_WEBHOOK_SECRET) {
-    return res.status(500).json({ error: 'Webhook secret not configured' });
-  }
-  if (!signature) {
-    return res.status(400).json({ error: 'Missing signature header' });
-  }
-  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-  const expected = crypto
-    .createHmac('sha256', PAYPACK_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest('base64');
-  const signatureValid =
-    signature.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  if (!signatureValid) {
-    return res.status(400).json({ error: 'Invalid signature' });
-  }
-
-  const payload = req.body || {};
-  const data = payload.data || {};
-  const ref = data.ref;
-  const status = data.status;
-  if (!ref) {
-    return res.status(200).json({ ok: true });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending) {
-    return res.status(200).json({ ok: true });
-  }
-
-  pending.status = status || pending.status || 'pending';
-  pending.updatedAt = new Date().toISOString();
-
-  if (status === 'successful' && !pending.orderId) {
-    const user = store.users.find((entry) => entry.id === pending.userId);
-    if (user) {
-      const orderPayload = pending.orderPayload || {};
-      const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Provider: ${data.provider || ''} | Ref: ${ref}`.trim();
-      try {
-        const order = createOrderRecord(store, user, orderPayload, {
-          status: 'confirmed',
-          paypackRef: ref,
-          paymentStatus: status,
-          totalAmount: pending.subtotal,
-          deliveryFee: pending.deliveryFee,
-          notes
-        });
-        pending.orderId = order.id;
-      } catch (err) {
-        pending.failureReason = err?.message || 'Failed to finalize order';
-      }
-    }
-  }
-
-  await saveData(store);
-  return res.status(200).json({ ok: true });
-});
 
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body || {};
@@ -1055,206 +960,8 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-app.post('/api/paypack/cashin', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
 
-  const payload = req.body?.order || req.body || {};
-  const phone = payload.customerPhone || payload.phone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
 
-  const store = await loadData();
-  const user = store.users.find((entry) => entry.id === req.userId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  let items;
-  try {
-    items = buildOrderItems(payload.items, store.products);
-  } catch (err) {
-    return res.status(400).json({ error: 'Order items required' });
-  }
-
-  const deliveryZone =
-    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
-      ? payload.deliveryZone
-      : 'local';
-  const deliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
-  const subtotal = items.reduce(
-    (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
-    0
-  );
-  const amount = subtotal + deliveryFee;
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const ref = tx?.ref;
-    if (!ref) {
-      throw new Error('Missing transaction reference');
-    }
-
-    const pending = {
-      id: nextId('PAY', store.pendingPayments),
-      ref,
-      status: tx?.status || 'pending',
-      amount,
-      subtotal,
-      deliveryFee,
-      userId: user.id,
-      customerId: user.customerId,
-      orderPayload: {
-        items: payload.items,
-        customerName: payload.customerName || user.name,
-        customerPhone: payload.customerPhone || user.phone || '',
-        customerEmail: payload.customerEmail || user.email,
-        deliveryAddress: payload.deliveryAddress || '',
-        deliveryDate: payload.deliveryDate || '',
-        deliveryTimeWindow: payload.deliveryTimeWindow || '',
-        deliveryZone,
-        notes: payload.notes || ''
-      },
-      createdAt: new Date().toISOString()
-    };
-
-    store.pendingPayments.unshift(pending);
-    await saveData(store);
-
-    return res.json({
-      ref,
-      status: pending.status,
-      amount
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to initiate payment' });
-  }
-});
-
-app.post('/api/paypack/retry/:ref', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending || pending.userId !== req.userId) {
-    return res.status(404).json({ error: 'Pending payment not found' });
-  }
-  if (pending.status === 'successful') {
-    return res.status(400).json({ error: 'Payment already successful' });
-  }
-
-  const orderPayload = pending.orderPayload || {};
-  const phone = orderPayload.customerPhone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount: pending.amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const newRef = tx?.ref;
-    if (!newRef) {
-      throw new Error('Missing transaction reference');
-    }
-
-    pending.status = 'retried';
-    pending.updatedAt = new Date().toISOString();
-    pending.retriedTo = newRef;
-
-    const retryEntry = {
-      ...pending,
-      id: nextId('PAY', store.pendingPayments),
-      ref: newRef,
-      status: tx?.status || 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: undefined,
-      retriedFrom: ref,
-      retriedTo: undefined,
-      orderId: undefined
-    };
-
-    store.pendingPayments.unshift(retryEntry);
-    await saveData(store);
-    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
-  }
-});
-
-app.get('/api/paypack/transactions/:ref', authMiddleware, async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  try {
-    const txRes = await paypack.transaction(ref);
-    const tx = txRes?.data || txRes;
-
-    const store = await loadData();
-    const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-    let order = null;
-
-    if (pending && tx?.status) {
-      pending.status = tx.status;
-      pending.updatedAt = new Date().toISOString();
-
-      if (tx.status === 'successful' && !pending.orderId) {
-        const user = store.users.find((entry) => entry.id === pending.userId);
-        if (user) {
-          const orderPayload = pending.orderPayload || {};
-          const notes = `${orderPayload.notes || ''}\nPayment: ${pending.amount} FRW | Ref: ${ref}`.trim();
-          try {
-            order = createOrderRecord(store, user, orderPayload, {
-              status: 'confirmed',
-              paypackRef: ref,
-              paymentStatus: tx.status,
-              totalAmount: pending.subtotal,
-              deliveryFee: pending.deliveryFee,
-              notes
-            });
-            pending.orderId = order.id;
-          } catch (err) {
-            pending.failureReason = err?.message || 'Failed to finalize order';
-          }
-        }
-      }
-
-      if (tx.status === 'failed') {
-        pending.failureReason = tx?.message || pending.failureReason || '';
-      }
-
-      await saveData(store);
-    }
-
-    return res.json({ transaction: tx, order });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to fetch transaction' });
-  }
-});
 
 app.get('/api/payments/my', authMiddleware, async (req, res) => {
   const data = await loadData();
@@ -1325,66 +1032,6 @@ app.get('/api/admin/payments', async (req, res) => {
   res.json({ payments: paginateList(data.pendingPayments, req) });
 });
 
-app.post('/api/admin/payments/retry/:ref', async (req, res) => {
-  const paypack = await getPaypackClient();
-  if (!paypack) {
-    return res.status(500).json({ error: 'Paypack configuration missing' });
-  }
-  const { ref } = req.params;
-  if (!ref) {
-    return res.status(400).json({ error: 'Missing transaction reference' });
-  }
-
-  const store = await loadData();
-  const pending = store.pendingPayments.find((entry) => entry.ref === ref);
-  if (!pending) {
-    return res.status(404).json({ error: 'Pending payment not found' });
-  }
-  if (pending.status === 'successful') {
-    return res.status(400).json({ error: 'Payment already successful' });
-  }
-
-  const orderPayload = pending.orderPayload || {};
-  const phone = orderPayload.customerPhone;
-  if (!phone) {
-    return res.status(400).json({ error: 'Customer phone is required' });
-  }
-
-  try {
-    const cashinRes = await paypack.cashin({
-      number: String(phone),
-      amount: pending.amount,
-      environment: PAYPACK_WEBHOOK_MODE
-    });
-    const tx = cashinRes?.data || cashinRes;
-    const newRef = tx?.ref;
-    if (!newRef) {
-      throw new Error('Missing transaction reference');
-    }
-
-    pending.status = 'retried';
-    pending.updatedAt = new Date().toISOString();
-    pending.retriedTo = newRef;
-
-    const retryEntry = {
-      ...pending,
-      id: nextId('PAY', store.pendingPayments),
-      ref: newRef,
-      status: tx?.status || 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: undefined,
-      retriedFrom: ref,
-      retriedTo: undefined,
-      orderId: undefined
-    };
-
-    store.pendingPayments.unshift(retryEntry);
-    await saveData(store);
-    return res.json({ ref: newRef, status: retryEntry.status, amount: retryEntry.amount });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Failed to retry payment' });
-  }
-});
 
 app.post('/api/admin/payments/approve/:id', async (req, res) => {
   const { id } = req.params;
@@ -1413,7 +1060,6 @@ app.post('/api/admin/payments/approve/:id', async (req, res) => {
   try {
     order = createOrderRecord(store, user, payment.orderPayload || {}, {
       status: 'confirmed',
-      paypackRef: payment.ref,
       paymentStatus: 'approved',
       totalAmount: payment.subtotal,
       deliveryFee: payment.deliveryFee,
@@ -1654,6 +1300,19 @@ app.post('/api/uploads/gallery', galleryUpload.single('file'), async (req, res) 
     return res.json({ url: stored.url });
   } catch (err) {
     console.error('Gallery upload failed:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
+  }
+});
+
+app.post('/api/uploads/product', productUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  try {
+    const stored = await saveUploadedFile('products', req.file);
+    return res.json({ url: stored.url });
+  } catch (err) {
+    console.error('Product image upload failed:', err?.message || err);
     return res.status(500).json({ error: err?.message || 'Failed to store uploaded file' });
   }
 });
@@ -1948,85 +1607,6 @@ app.delete('/api/admin/messages/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/chat', async (req, res) => {
-  if (!GROQ_API_KEY) {
-    return res.status(500).json({ error: 'Chat assistant is not configured' });
-  }
-
-  const body = req.body || {};
-  const message = typeof body.message === 'string' ? body.message.trim() : '';
-  const currentPage = typeof body.currentPage === 'string' ? body.currentPage : 'home';
-  const language = typeof body.language === 'string' ? body.language : 'en';
-  const cartItems = Number.isFinite(Number(body.cartItems)) ? Number(body.cartItems) : 0;
-
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-  if (message.length > 1500) {
-    return res.status(400).json({ error: 'Message is too long' });
-  }
-
-  try {
-    const data = await loadData();
-    const productHints = (data.products || [])
-      .slice(0, 6)
-      .map((p) => {
-        const productName = resolveLocalizedText(p?.name, language);
-        return `${productName || 'Product'} (${Number(p?.price || 0)} FRW)`;
-      })
-      .join(', ');
-    const latestAnnouncement = data.announcements?.[0]
-      ? resolveLocalizedText(data.announcements[0]?.title, language)
-      : '';
-
-    const systemPrompt =
-      'You are the support assistant for HABAKURAMA Jean Dieu poultry app. ' +
-      'Be concise, practical, and app-specific. Help with products, cart, checkout, payment, account, orders, and contact. ' +
-      'If user asks outside app scope, politely redirect to app-relevant help. ' +
-      'Never invent prices or policies not in context.';
-
-    const contextPrompt =
-      `Context: page=${currentPage}, language=${language}, cartItems=${cartItems}. ` +
-      `Known products: ${productHints || 'none'}. ` +
-      `Latest announcement: ${latestAnnouncement || 'none'}.`;
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0.4,
-        max_tokens: 350,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'system', content: contextPrompt },
-          { role: 'user', content: message }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const failureText = await response.text();
-      return res.status(502).json({
-        error: 'Chat provider request failed',
-        detail: failureText.slice(0, 300)
-      });
-    }
-
-    const payload = await response.json();
-    const reply = payload?.choices?.[0]?.message?.content;
-    if (!reply || typeof reply !== 'string') {
-      return res.status(502).json({ error: 'Invalid chat provider response' });
-    }
-    return res.json({ reply });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || 'Chat assistant failed' });
-  }
-});
-
 app.post('/api/orders', authMiddleware, async (req, res) => {
   const payload = req.body || {};
   const data = await loadData();
@@ -2140,3 +1720,4 @@ if (!runningInFunction) {
 
 export { app };
 export default app;
+
