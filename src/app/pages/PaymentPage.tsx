@@ -35,6 +35,7 @@ export function PaymentPage() {
     customerName: '',
     customerPhone: '',
     customerEmail: '',
+    fulfillmentMethod: 'delivery' as 'pickup' | 'delivery',
     deliveryAddress: '',
     deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
@@ -79,7 +80,7 @@ export function PaymentPage() {
     national: 15000
   };
 
-  const deliveryFee = deliveryFees[orderData.deliveryZone];
+  const deliveryFee = orderData.fulfillmentMethod === 'pickup' ? 0 : deliveryFees[orderData.deliveryZone];
   const totalAmount = cartTotal + deliveryFee;
 
   const formattedDeadline = useMemo(() => {
@@ -109,7 +110,13 @@ export function PaymentPage() {
       return;
     }
 
-    if (!orderData.customerName || !orderData.customerPhone || !orderData.customerEmail || !orderData.deliveryAddress || !orderData.deliveryDate) {
+    if (!orderData.customerName || !orderData.customerPhone || !orderData.customerEmail) {
+      toast.error('Missing required checkout information');
+      setCurrentPage('checkout');
+      return;
+    }
+
+    if (orderData.fulfillmentMethod === 'delivery' && (!orderData.deliveryAddress || !orderData.deliveryDate)) {
       toast.error('Missing required checkout information');
       setCurrentPage('checkout');
       return;
@@ -131,6 +138,7 @@ export function PaymentPage() {
             totalAmount: cartTotal,
             deliveryFee,
             deliveryZone: orderData.deliveryZone,
+            fulfillmentMethod: orderData.fulfillmentMethod,
             customerId: orderData.customerId || authUser?.customerId
           }
         })
@@ -249,12 +257,14 @@ export function PaymentPage() {
                   </div>
                 </div>
 
+
                 <div className="bg-[#FFF5F5] border border-[#F3B7B7] rounded-lg p-4 text-sm text-[#6B5344] flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-[#C41E3A] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-semibold text-[#3D2817]">{t('payment.important')}</p>
                     <p>{t('payment.importantLine1')}</p>
                     <p>{t('payment.importantLine2')}</p>
+                    <p>After payment, admin will call you to coordinate pickup or delivery outside the app.</p>
                   </div>
                 </div>
 

@@ -17,6 +17,7 @@ export function CheckoutPage() {
     customerName: '',
     customerPhone: '',
     customerEmail: '',
+    fulfillmentMethod: 'delivery' as 'pickup' | 'delivery',
     deliveryAddress: '',
     deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
@@ -49,7 +50,7 @@ export function CheckoutPage() {
     national: 15000
   };
 
-  const deliveryFee = deliveryFees[formData.deliveryZone];
+  const deliveryFee = formData.fulfillmentMethod === 'pickup' ? 0 : deliveryFees[formData.deliveryZone];
   const totalAmount = cartTotal + deliveryFee;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -70,7 +71,12 @@ export function CheckoutPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.customerName || !formData.customerPhone || !formData.customerEmail || !formData.deliveryAddress || !formData.deliveryDate) {
+    if (!formData.customerName || !formData.customerPhone || !formData.customerEmail) {
+      toast.error(t('checkout.fillRequired'));
+      return;
+    }
+
+    if (formData.fulfillmentMethod === 'delivery' && (!formData.deliveryAddress || !formData.deliveryDate)) {
       toast.error(t('checkout.fillRequired'));
       return;
     }
@@ -79,7 +85,7 @@ export function CheckoutPage() {
       name: formData.customerName,
       phone: formData.customerPhone,
       email: formData.customerEmail,
-      address: formData.deliveryAddress
+      address: formData.fulfillmentMethod === 'delivery' ? formData.deliveryAddress : ''
     };
 
     const persistCheckout = () => {
@@ -200,8 +206,26 @@ export function CheckoutPage() {
                     </h2>
                     <div className="space-y-4">
                       <div>
+                        <label htmlFor="fulfillmentMethod" className="block text-sm font-semibold text-[#3D2817] mb-2">
+                          Order Method *
+                        </label>
+                        <Select
+                          value={formData.fulfillmentMethod}
+                          onValueChange={(value) => handleSelectChange('fulfillmentMethod', value)}
+                        >
+                          <SelectTrigger className="border-[#D2B48C]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="delivery">Delivery</SelectItem>
+                            <SelectItem value="pickup">Pickup (I will come and take my order)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
                         <label htmlFor="deliveryAddress" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                          {t('checkout.deliveryAddress')} *
+                          {t('checkout.deliveryAddress')}{formData.fulfillmentMethod === 'delivery' ? ' *' : ''}
                         </label>
                         <Textarea
                           id="deliveryAddress"
@@ -209,7 +233,8 @@ export function CheckoutPage() {
                           placeholder={t('checkout.deliveryAddressPlaceholder')}
                           value={formData.deliveryAddress}
                           onChange={handleInputChange}
-                          required
+                          required={formData.fulfillmentMethod === 'delivery'}
+                          disabled={formData.fulfillmentMethod === 'pickup'}
                           rows={3}
                           className="border-[#D2B48C] focus:border-[#FFD700]"
                         />
@@ -220,7 +245,11 @@ export function CheckoutPage() {
                           <label htmlFor="deliveryZone" className="block text-sm font-semibold text-[#3D2817] mb-2">
                             {t('checkout.deliveryZone')} *
                           </label>
-                          <Select value={formData.deliveryZone} onValueChange={(value) => handleSelectChange('deliveryZone', value)}>
+                          <Select
+                            value={formData.deliveryZone}
+                            onValueChange={(value) => handleSelectChange('deliveryZone', value)}
+                            disabled={formData.fulfillmentMethod === 'pickup'}
+                          >
                             <SelectTrigger className="border-[#D2B48C]">
                               <SelectValue />
                             </SelectTrigger>
@@ -234,7 +263,7 @@ export function CheckoutPage() {
 
                         <div>
                           <label htmlFor="deliveryDate" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            {t('checkout.preferredDate')} *
+                            {t('checkout.preferredDate')}{formData.fulfillmentMethod === 'delivery' ? ' *' : ''}
                           </label>
                           <Input
                             id="deliveryDate"
@@ -242,7 +271,8 @@ export function CheckoutPage() {
                             type="date"
                             value={formData.deliveryDate}
                             onChange={handleInputChange}
-                            required
+                            required={formData.fulfillmentMethod === 'delivery'}
+                            disabled={formData.fulfillmentMethod === 'pickup'}
                             className="border-[#D2B48C] focus:border-[#FFD700]"
                           />
                         </div>
@@ -252,7 +282,11 @@ export function CheckoutPage() {
                         <label htmlFor="deliveryTimeWindow" className="block text-sm font-semibold text-[#3D2817] mb-2">
                           {t('checkout.preferredWindow')}
                         </label>
-                        <Select value={formData.deliveryTimeWindow} onValueChange={(value) => handleSelectChange('deliveryTimeWindow', value)}>
+                        <Select
+                          value={formData.deliveryTimeWindow}
+                          onValueChange={(value) => handleSelectChange('deliveryTimeWindow', value)}
+                          disabled={formData.fulfillmentMethod === 'pickup'}
+                        >
                           <SelectTrigger className="border-[#D2B48C]">
                             <SelectValue />
                           </SelectTrigger>
@@ -345,14 +379,20 @@ export function CheckoutPage() {
 
                 {/* Delivery Information */}
                 <div className="bg-[#F0EAD6] rounded-lg p-4 text-sm text-[#6B5344] space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-[#C41E3A]" />
-                    <span>{t('checkout.deliveryDateHint')}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-[#C41E3A]" />
-                    <span>{t('checkout.deliveryWindowHint')}</span>
-                  </div>
+                  {formData.fulfillmentMethod === 'delivery' ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-[#C41E3A]" />
+                        <span>{t('checkout.deliveryDateHint')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-[#C41E3A]" />
+                        <span>{t('checkout.deliveryWindowHint')}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span>Pickup selected. Admin will call you to coordinate pickup details.</span>
+                  )}
                 </div>
               </Card>
             </div>
