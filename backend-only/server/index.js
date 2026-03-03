@@ -64,6 +64,12 @@ const DELIVERY_FEES = {
   national: 15000
 };
 const DELIVERY_FEE_PER_TRAY = 300;
+const FARM_ORIGIN = {
+  name: 'GS Kawangire Catholique',
+  latitude: -1.7879506,
+  longitude: 30.4722743
+};
+const NOMINATIM_USER_AGENT = 'GoodrichFarmApp/1.0 (delivery-estimation)';
 const MAX_ADMIN_LIMIT = 1000;
 const SUPPORTED_LANGUAGES = ['en', 'rw', 'sw', 'fr'];
 const DEFAULT_CONTENT_LANGUAGE = 'en';
@@ -358,6 +364,8 @@ const orderSchema = new mongoose.Schema(
     fulfillmentMethod: { type: String, default: 'delivery' },
     deliveryZone: { type: String, default: 'local' },
     deliveryFee: { type: Number, default: 0 },
+    deliveryDistanceKm: { type: Number, default: 0 },
+    deliveryChargeableKm: { type: Number, default: 0 },
     deliveryAddress: { type: String, default: '' },
     locationMeta: { type: mongoose.Schema.Types.Mixed, default: null },
     deliveryDate: { type: String, default: '' },
@@ -713,13 +721,91 @@ const normalizeRwandaPhone = (value) => {
 
 const isValidRwandaPhone = (value) => /^\+2507\d{8}$/.test(String(value || ''));
 
-const calculateDeliveryFeeByQuantity = (items, fulfillmentMethod) => {
-  if (fulfillmentMethod === 'pickup') return 0;
-  const totalQty = (Array.isArray(items) ? items : []).reduce(
-    (sum, item) => sum + Number(item?.quantity || 0),
-    0
+const haversineKm = (lat1, lon1, lat2, lon2) => {
+  const toRad = (deg) => (Number(deg) * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371 * c;
+};
+
+const resolveDestinationCoordinates = async ({ deliveryAddress, locationMeta }) => {
+  const metaLat = Number(locationMeta?.latitude);
+  const metaLng = Number(locationMeta?.longitude);
+  if (Number.isFinite(metaLat) && Number.isFinite(metaLng)) {
+    return {
+      latitude: metaLat,
+      longitude: metaLng,
+      source: 'locationMeta'
+    };
+  }
+
+  const addressText = String(deliveryAddress || '').trim();
+  if (!addressText) return null;
+
+  const query = encodeURIComponent(`${addressText}, Rwanda`);
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${query}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': NOMINATIM_USER_AGENT }
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => []);
+  const first = Array.isArray(data) ? data[0] : null;
+  const lat = Number(first?.lat);
+  const lon = Number(first?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return {
+    latitude: lat,
+    longitude: lon,
+    source: 'geocodedAddress',
+    displayName: first?.display_name || ''
+  };
+};
+
+const calculateDeliveryEstimate = async ({ items, fulfillmentMethod, deliveryAddress, locationMeta }) => {
+  const trays = (Array.isArray(items) ? items : []).reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+  if (fulfillmentMethod === 'pickup') {
+    return {
+      trays,
+      distanceKm: 0,
+      chargeableKm: 0,
+      deliveryFee: 0,
+      origin: FARM_ORIGIN,
+      destination: null
+    };
+  }
+
+  if (trays <= 0) {
+    throw new Error('Order items required');
+  }
+
+  const destination = await resolveDestinationCoordinates({ deliveryAddress, locationMeta });
+  if (!destination) {
+    throw new Error('Unable to resolve destination location');
+  }
+
+  const rawDistance = haversineKm(
+    FARM_ORIGIN.latitude,
+    FARM_ORIGIN.longitude,
+    destination.latitude,
+    destination.longitude
   );
-  return Math.max(0, totalQty * DELIVERY_FEE_PER_TRAY);
+  const distanceKm = Number(rawDistance.toFixed(2));
+  const chargeableKm = Math.max(1, Math.ceil(distanceKm));
+  const deliveryFee = trays * chargeableKm * DELIVERY_FEE_PER_TRAY;
+
+  return {
+    trays,
+    distanceKm,
+    chargeableKm,
+    deliveryFee,
+    origin: FARM_ORIGIN,
+    destination
+  };
 };
 
 const paginateList = (items, req) => {
@@ -842,11 +928,12 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
   }
   const fulfillmentMethod = payload.fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery';
   const deliveryZone = 'local';
-  const computedDeliveryFee = calculateDeliveryFeeByQuantity(items, fulfillmentMethod);
   const deliveryFee =
     typeof overrides.deliveryFee === 'number'
       ? overrides.deliveryFee
-      : computedDeliveryFee;
+      : typeof payload.deliveryFee === 'number'
+        ? payload.deliveryFee
+        : 0;
   const subtotal = items.reduce(
     (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
     0
@@ -873,6 +960,8 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     fulfillmentMethod,
     deliveryZone,
     deliveryFee,
+    deliveryDistanceKm: Number(payload.deliveryDistanceKm || 0),
+    deliveryChargeableKm: Number(payload.deliveryChargeableKm || 0),
     deliveryAddress: fulfillmentMethod === 'delivery' ? payload.deliveryAddress || '' : '',
     locationMeta: payload.locationMeta || null,
     deliveryDate: payload.deliveryDate || '',
@@ -997,6 +1086,22 @@ app.get('/api/payments/my', authMiddleware, async (req, res) => {
   res.json({ payments });
 });
 
+app.post('/api/delivery/estimate', async (req, res) => {
+  const payload = req.body || {};
+  const fulfillmentMethod = payload.fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery';
+  try {
+    const estimate = await calculateDeliveryEstimate({
+      items: payload.items,
+      fulfillmentMethod,
+      deliveryAddress: payload.deliveryAddress,
+      locationMeta: payload.locationMeta
+    });
+    return res.json({ estimate });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Failed to estimate delivery fee' });
+  }
+});
+
 app.post('/api/payments/manual', authMiddleware, async (req, res) => {
   const payload = req.body?.order || req.body || {};
   const data = await loadData();
@@ -1021,7 +1126,18 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
   }
 
   const deliveryZone = 'local';
-  const deliveryFee = calculateDeliveryFeeByQuantity(items, fulfillmentMethod);
+  let estimate;
+  try {
+    estimate = await calculateDeliveryEstimate({
+      items,
+      fulfillmentMethod,
+      deliveryAddress: payload.deliveryAddress,
+      locationMeta: payload.locationMeta
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Failed to estimate delivery fee' });
+  }
+  const deliveryFee = estimate.deliveryFee;
   const subtotal = items.reduce(
     (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
     0
@@ -1047,6 +1163,8 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
       customerEmail: payload.customerEmail || user.email,
       fulfillmentMethod,
       deliveryAddress: fulfillmentMethod === 'delivery' ? payload.deliveryAddress || '' : '',
+      deliveryDistanceKm: estimate.distanceKm,
+      deliveryChargeableKm: estimate.chargeableKm,
       locationMeta: payload.locationMeta || null,
       deliveryDate: payload.deliveryDate || '',
       deliveryTimeWindow: payload.deliveryTimeWindow || '',
@@ -1650,9 +1768,31 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
+  const fulfillmentMethod = payload.fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery';
+  if (fulfillmentMethod === 'delivery' && !String(payload.deliveryAddress || '').trim()) {
+    return res.status(400).json({ error: 'Delivery address is required' });
+  }
+  let estimate;
+  try {
+    estimate = await calculateDeliveryEstimate({
+      items: payload.items,
+      fulfillmentMethod,
+      deliveryAddress: payload.deliveryAddress,
+      locationMeta: payload.locationMeta
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Failed to estimate delivery fee' });
+  }
+
   let order;
   try {
-    order = createOrderRecord(data, user, payload);
+    order = createOrderRecord(data, user, {
+      ...payload,
+      fulfillmentMethod,
+      deliveryFee: estimate.deliveryFee,
+      deliveryDistanceKm: estimate.distanceKm,
+      deliveryChargeableKm: estimate.chargeableKm
+    });
   } catch (err) {
     return res.status(400).json({ error: err?.message || 'Order items required' });
   }

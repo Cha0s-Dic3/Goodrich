@@ -9,6 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 
+interface DeliveryEstimate {
+  trays: number;
+  distanceKm: number;
+  chargeableKm: number;
+  deliveryFee: number;
+}
+
 export function CheckoutPage() {
   const { cart, cartTotal, setCurrentPage, isUserLoggedIn, authUser, authToken } = useApp();
   const { t } = useI18n();
@@ -33,6 +40,9 @@ export function CheckoutPage() {
   });
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
+  const [isEstimatingDelivery, setIsEstimatingDelivery] = useState(false);
+  const [deliveryEstimateError, setDeliveryEstimateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isUserLoggedIn) {
@@ -54,9 +64,76 @@ export function CheckoutPage() {
   }, [authUser]);
 
   const totalTrays = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const deliveryFeePerTray = 300;
-  const deliveryFee = formData.fulfillmentMethod === 'pickup' ? 0 : totalTrays * deliveryFeePerTray;
+  const fallbackDeliveryFee = formData.fulfillmentMethod === 'pickup' ? 0 : totalTrays * 300;
+  const deliveryFee = deliveryEstimate?.deliveryFee ?? fallbackDeliveryFee;
   const totalAmount = cartTotal + deliveryFee;
+
+  useEffect(() => {
+    if (formData.fulfillmentMethod === 'pickup') {
+      setDeliveryEstimate({ trays: totalTrays, distanceKm: 0, chargeableKm: 0, deliveryFee: 0 });
+      setDeliveryEstimateError(null);
+      setIsEstimatingDelivery(false);
+      return;
+    }
+
+    if (!cart.length) {
+      setDeliveryEstimate(null);
+      setDeliveryEstimateError(null);
+      setIsEstimatingDelivery(false);
+      return;
+    }
+
+    const hasDestination =
+      Boolean(formData.deliveryAddress.trim()) ||
+      (Number.isFinite(formData.locationMeta?.latitude) && Number.isFinite(formData.locationMeta?.longitude));
+    if (!hasDestination) {
+      setDeliveryEstimate(null);
+      setDeliveryEstimateError(null);
+      setIsEstimatingDelivery(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsEstimatingDelivery(true);
+      try {
+        const res = await fetch('/api/delivery/estimate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fulfillmentMethod: formData.fulfillmentMethod,
+            deliveryAddress: formData.deliveryAddress,
+            locationMeta: formData.locationMeta,
+            items: cart
+          }),
+          signal: controller.signal
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.estimate) {
+          throw new Error(data?.error || 'Failed to estimate delivery fee');
+        }
+        setDeliveryEstimate(data.estimate);
+        setDeliveryEstimateError(null);
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        setDeliveryEstimate(null);
+        setDeliveryEstimateError(err?.message || 'Unable to estimate delivery fee');
+      } finally {
+        setIsEstimatingDelivery(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    cart,
+    formData.fulfillmentMethod,
+    formData.deliveryAddress,
+    formData.locationMeta,
+    totalTrays
+  ]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -463,6 +540,17 @@ export function CheckoutPage() {
                     <span>{t('checkout.deliveryFee')}</span>
                     <span className="font-semibold">{deliveryFee.toLocaleString()} FRW</span>
                   </div>
+                  {formData.fulfillmentMethod === 'delivery' && deliveryEstimate && (
+                    <div className="text-xs text-[#6B5344]">
+                      Distance {deliveryEstimate.distanceKm.toFixed(2)} km (charged {deliveryEstimate.chargeableKm} km) x {deliveryEstimate.trays} trays x 300 FRW
+                    </div>
+                  )}
+                  {formData.fulfillmentMethod === 'delivery' && isEstimatingDelivery && (
+                    <div className="text-xs text-[#6B5344]">Estimating delivery distance...</div>
+                  )}
+                  {formData.fulfillmentMethod === 'delivery' && deliveryEstimateError && (
+                    <div className="text-xs text-[#C41E3A]">{deliveryEstimateError}</div>
+                  )}
                   <div className="pt-2 border-t border-[#D2B48C] flex justify-between">
                     <span className="font-bold text-[#3D2817]">{t('checkout.total')}</span>
                     <span className="text-2xl font-bold text-[#C41E3A]">

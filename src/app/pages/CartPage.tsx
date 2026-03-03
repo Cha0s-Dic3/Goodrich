@@ -9,7 +9,7 @@ export function CartPage() {
   const { cart, removeFromCart, updateCartQuantity, cartTotal, setCurrentPage, isUserLoggedIn } = useApp();
   const { t } = useI18n();
   
-  const deliveryFee = 3000; // Default local delivery fee
+  const deliveryFee = 0;
   const totalAmount = cartTotal + deliveryFee;
   const minimumOrder = 4500;
   
@@ -161,7 +161,7 @@ export function CartPage() {
                 </div>
                 <div className="flex justify-between text-[#6B5344]">
                   <span>{t('cart.deliveryFeeLocal')}</span>
-                  <span>{deliveryFee.toLocaleString()} FRW</span>
+                  <span>Calculated at checkout</span>
                 </div>
                 <div className="border-t-2 border-[#D2B48C] pt-3 flex justify-between text-xl text-[#3D2817]">
                   <span>{t('cart.total')}</span>
