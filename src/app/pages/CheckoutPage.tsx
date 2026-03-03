@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapPin, Mail, Package, Calendar, Clock } from 'lucide-react';
+import { MapPin, Mail, Package, Calendar, Clock, LocateFixed } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useI18n } from '../hooks/useI18n';
 import { Button } from '../components/ui/button';
@@ -22,8 +22,18 @@ export function CheckoutPage() {
     deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
     deliveryTimeWindow: '9:00 AM - 12:00 PM',
-    notes: ''
+    notes: '',
+    locationMeta: null as null | {
+      latitude: number;
+      longitude: number;
+      accuracy: number;
+      mapUrl: string;
+      resolvedAddress?: string;
+      capturedAt: string;
+    }
   });
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isUserLoggedIn) {
@@ -68,28 +78,121 @@ export function CheckoutPage() {
     }));
   };
 
+  const normalizeRwandaPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.startsWith('250') && digits.length === 12) {
+      return `+${digits}`;
+    }
+    if (digits.startsWith('07') && digits.length === 10) {
+      return `+250${digits.slice(1)}`;
+    }
+    if (digits.startsWith('7') && digits.length === 9) {
+      return `+250${digits}`;
+    }
+    return value.trim();
+  };
+
+  const isValidRwandaPhone = (value: string) => {
+    return /^\+2507\d{8}$/.test(value);
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported on this device.');
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude.toFixed(6);
+        const lng = position.coords.longitude.toFixed(6);
+        const mapUrl = `https://maps.google.com/?q=${lat},${lng}`;
+        let resolvedAddress = '';
+        try {
+          const reverse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
+          );
+          if (reverse.ok) {
+            const reverseData = await reverse.json();
+            resolvedAddress = reverseData?.display_name || '';
+          }
+        } catch (err) {
+          // Keep coordinates fallback if reverse geocoding fails.
+        }
+        setFormData((prev) => ({
+          ...prev,
+          deliveryAddress: resolvedAddress
+            ? `${resolvedAddress}\n${mapUrl}`
+            : `Current location: ${lat}, ${lng}\n${mapUrl}`,
+          locationMeta: {
+            latitude: Number(lat),
+            longitude: Number(lng),
+            accuracy: Number(position.coords.accuracy || 0),
+            mapUrl,
+            resolvedAddress: resolvedAddress || undefined,
+            capturedAt: new Date().toISOString()
+          }
+        }));
+        setIsLocating(false);
+        toast.success('Current location added to delivery address.');
+      },
+      (error) => {
+        setIsLocating(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError('Location permission denied. Please allow location access and enter address manually if needed.');
+          toast.error('Location permission denied. Please allow location access.');
+          return;
+        }
+        setLocationError('Unable to fetch current location. Please type your address manually.');
+        toast.error('Failed to get current location.');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.customerName || !formData.customerPhone || !formData.customerEmail) {
+    const trimmedName = formData.customerName.trim();
+    const normalizedPhone = normalizeRwandaPhone(formData.customerPhone);
+    const trimmedEmail = formData.customerEmail.trim();
+    const trimmedAddress = formData.deliveryAddress.trim();
+
+    if (!trimmedName || !normalizedPhone || !trimmedEmail) {
       toast.error(t('checkout.fillRequired'));
       return;
     }
 
-    if (formData.fulfillmentMethod === 'delivery' && (!formData.deliveryAddress || !formData.deliveryDate)) {
+    if (!isValidRwandaPhone(normalizedPhone)) {
+      toast.error('Use a valid Rwanda phone number (e.g. +2507XXXXXXXX).');
+      return;
+    }
+
+    if (formData.fulfillmentMethod === 'delivery' && (!trimmedAddress || !formData.deliveryDate)) {
       toast.error(t('checkout.fillRequired'));
       return;
     }
 
     const payload = {
-      name: formData.customerName,
-      phone: formData.customerPhone,
-      email: formData.customerEmail,
-      address: formData.fulfillmentMethod === 'delivery' ? formData.deliveryAddress : ''
+      name: trimmedName,
+      phone: normalizedPhone,
+      email: trimmedEmail,
+      address: formData.fulfillmentMethod === 'delivery' ? trimmedAddress : ''
     };
 
     const persistCheckout = () => {
-      sessionStorage.setItem('checkoutData', JSON.stringify(formData));
+      sessionStorage.setItem(
+        'checkoutData',
+        JSON.stringify({
+          ...formData,
+          customerName: trimmedName,
+          customerPhone: normalizedPhone,
+          customerEmail: trimmedEmail,
+          deliveryAddress: formData.fulfillmentMethod === 'delivery' ? trimmedAddress : ''
+        })
+      );
       toast.success(t('checkout.savedProceeding'));
       setCurrentPage('payment');
     };
@@ -227,6 +330,22 @@ export function CheckoutPage() {
                         <label htmlFor="deliveryAddress" className="block text-sm font-semibold text-[#3D2817] mb-2">
                           {t('checkout.deliveryAddress')}{formData.fulfillmentMethod === 'delivery' ? ' *' : ''}
                         </label>
+                        <div className="mb-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleUseCurrentLocation}
+                            disabled={formData.fulfillmentMethod === 'pickup' || isLocating}
+                            className="border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513] hover:text-white"
+                          >
+                            <LocateFixed className="h-4 w-4 mr-2" />
+                            {isLocating ? 'Locating...' : 'Use Current Location'}
+                          </Button>
+                        </div>
+                        {locationError && (
+                          <p className="text-xs text-[#C41E3A] mb-2">{locationError}</p>
+                        )}
                         <Textarea
                           id="deliveryAddress"
                           name="deliveryAddress"

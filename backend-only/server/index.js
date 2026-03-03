@@ -357,6 +357,7 @@ const orderSchema = new mongoose.Schema(
     deliveryZone: { type: String, default: 'local' },
     deliveryFee: { type: Number, default: 0 },
     deliveryAddress: { type: String, default: '' },
+    locationMeta: { type: mongoose.Schema.Types.Mixed, default: null },
     deliveryDate: { type: String, default: '' },
     deliveryTimeWindow: { type: String, default: '' },
     status: { type: String, default: 'pending', index: true },
@@ -699,6 +700,17 @@ const nextId = (prefix, items) => {
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
 };
 
+const normalizeRwandaPhone = (value) => {
+  const raw = String(value || '');
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('250') && digits.length === 12) return `+${digits}`;
+  if (digits.startsWith('07') && digits.length === 10) return `+250${digits.slice(1)}`;
+  if (digits.startsWith('7') && digits.length === 9) return `+250${digits}`;
+  return raw.trim();
+};
+
+const isValidRwandaPhone = (value) => /^\+2507\d{8}$/.test(String(value || ''));
+
 const paginateList = (items, req) => {
   const limitRaw = req.query.limit ? Number(req.query.limit) : null;
   const offsetRaw = req.query.offset ? Number(req.query.offset) : 0;
@@ -813,6 +825,10 @@ const buildOrderItems = (itemsInput, products) => {
 
 const createOrderRecord = (data, user, payload, overrides = {}) => {
   const items = buildOrderItems(payload.items, data.products);
+  const normalizedPhone = normalizeRwandaPhone(payload.customerPhone || user.phone || '');
+  if (!isValidRwandaPhone(normalizedPhone)) {
+    throw new Error('Invalid Rwanda phone number');
+  }
   const deliveryZone =
     payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
       ? payload.deliveryZone
@@ -840,13 +856,14 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     userId: user.id,
     customerId: user.customerId,
     customerName: payload.customerName || user.name,
-    customerPhone: payload.customerPhone || user.phone || '',
+    customerPhone: normalizedPhone,
     customerEmail: payload.customerEmail || user.email,
     items,
     totalAmount,
     deliveryZone,
     deliveryFee,
     deliveryAddress: payload.deliveryAddress || '',
+    locationMeta: payload.locationMeta || null,
     deliveryDate: payload.deliveryDate || '',
     deliveryTimeWindow: payload.deliveryTimeWindow || '',
     status: overrides.status || payload.status || 'pending',
@@ -866,7 +883,7 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     if (order.deliveryAddress && !customer.addresses.includes(order.deliveryAddress)) {
       customer.addresses.push(order.deliveryAddress);
     }
-    if (order.customerPhone) customer.phone = order.customerPhone;
+    customer.phone = order.customerPhone;
   }
 
   items.forEach((item) => {
@@ -976,6 +993,10 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
+  const normalizedPhone = normalizeRwandaPhone(payload.customerPhone || user.phone || '');
+  if (!isValidRwandaPhone(normalizedPhone)) {
+    return res.status(400).json({ error: 'Invalid Rwanda phone number' });
+  }
 
   let items;
   try {
@@ -1010,9 +1031,10 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
     orderPayload: {
       items: payload.items,
       customerName: payload.customerName || user.name,
-      customerPhone: payload.customerPhone || user.phone || '',
+      customerPhone: normalizedPhone,
       customerEmail: payload.customerEmail || user.email,
       deliveryAddress: payload.deliveryAddress || '',
+      locationMeta: payload.locationMeta || null,
       deliveryDate: payload.deliveryDate || '',
       deliveryTimeWindow: payload.deliveryTimeWindow || '',
       deliveryZone,

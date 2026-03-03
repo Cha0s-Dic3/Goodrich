@@ -40,7 +40,15 @@ export function PaymentPage() {
     deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
     deliveryTimeWindow: '9:00 AM - 12:00 PM',
-    notes: ''
+    notes: '',
+    locationMeta: null as null | {
+      latitude: number;
+      longitude: number;
+      accuracy: number;
+      mapUrl: string;
+      resolvedAddress?: string;
+      capturedAt: string;
+    }
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentRequest, setPaymentRequest] = useState<ManualPaymentResponse['payment'] | null>(null);
@@ -83,6 +91,14 @@ export function PaymentPage() {
   const deliveryFee = orderData.fulfillmentMethod === 'pickup' ? 0 : deliveryFees[orderData.deliveryZone];
   const totalAmount = cartTotal + deliveryFee;
 
+  const normalizeRwandaPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.startsWith('250') && digits.length === 12) return `+${digits}`;
+    if (digits.startsWith('07') && digits.length === 10) return `+250${digits.slice(1)}`;
+    if (digits.startsWith('7') && digits.length === 9) return `+250${digits}`;
+    return value.trim();
+  };
+
   const formattedDeadline = useMemo(() => {
     if (!paymentRequest?.expiresAt) return null;
     return new Date(paymentRequest.expiresAt).toLocaleTimeString();
@@ -110,13 +126,22 @@ export function PaymentPage() {
       return;
     }
 
-    if (!orderData.customerName || !orderData.customerPhone || !orderData.customerEmail) {
+    const normalizedPhone = normalizeRwandaPhone(orderData.customerPhone);
+    const trimmedAddress = orderData.deliveryAddress.trim();
+
+    if (!orderData.customerName.trim() || !normalizedPhone || !orderData.customerEmail.trim()) {
       toast.error('Missing required checkout information');
       setCurrentPage('checkout');
       return;
     }
 
-    if (orderData.fulfillmentMethod === 'delivery' && (!orderData.deliveryAddress || !orderData.deliveryDate)) {
+    if (!/^\+2507\d{8}$/.test(normalizedPhone)) {
+      toast.error('Use a valid Rwanda phone number (e.g. +2507XXXXXXXX).');
+      setCurrentPage('checkout');
+      return;
+    }
+
+    if (orderData.fulfillmentMethod === 'delivery' && (!trimmedAddress || !orderData.deliveryDate)) {
       toast.error('Missing required checkout information');
       setCurrentPage('checkout');
       return;
@@ -134,6 +159,10 @@ export function PaymentPage() {
         body: JSON.stringify({
           order: {
             ...orderData,
+            customerPhone: normalizedPhone,
+            customerEmail: orderData.customerEmail.trim(),
+            customerName: orderData.customerName.trim(),
+            deliveryAddress: orderData.fulfillmentMethod === 'delivery' ? trimmedAddress : '',
             items: cart,
             totalAmount: cartTotal,
             deliveryFee,

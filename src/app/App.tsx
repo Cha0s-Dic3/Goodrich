@@ -40,6 +40,13 @@ function AppContent() {
   }, [language]);
 
   useEffect(() => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalhost && window.location.protocol === 'http:') {
+      window.location.replace(window.location.href.replace(/^http:/, 'https:'));
+    }
+  }, []);
+
+  useEffect(() => {
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       if (typeof input === 'string') {
