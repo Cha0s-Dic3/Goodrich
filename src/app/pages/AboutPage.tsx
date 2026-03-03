@@ -21,6 +21,15 @@ export function AboutPage() {
       <section className="py-16 bg-[#FFFDD0]">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl mb-6 text-[#3D2817]">About Goodrich Chicken Farm</h2>
+            <p className="text-lg text-[#3D2817] leading-relaxed mb-6">
+              Our chicken farm was founded with one simple goal: to raise healthy chickens using responsible and honest farming practices.
+              What began as a small family effort has grown into a trusted local poultry farm serving Kayonza District and beyond.
+            </p>
+            <p className="text-lg text-[#3D2817] leading-relaxed mb-10">
+              We specialize in egg production and poultry management with capacity for up to 5,000 chickens.
+              Our farm prioritizes animal welfare, natural feeding programs, sustainability, and food safety.
+            </p>
             <h2 className="text-4xl mb-8 text-[#3D2817] text-center">{t('about.storyTitle')}</h2>
             <div className="prose prose-lg max-w-none">
               <p className="text-lg text-[#3D2817] leading-relaxed mb-6">{t('about.storyPara1')}</p>
@@ -80,6 +89,11 @@ export function AboutPage() {
       <section className="py-16 bg-[#F0EAD6]">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl mb-4 text-[#3D2817]">Farm Location</h2>
+            <p className="text-lg text-[#3D2817] leading-relaxed mb-8">
+              Eastern Province, Kayonza District, Rukara Sector, Kawangire Cell, Rwanda<br />
+              Contact: 0788455886
+            </p>
             <div className="flex items-center gap-4 mb-8">
               <MapPin className="h-12 w-12 text-[#C41E3A]" />
               <h2 className="text-4xl text-[#3D2817]">{t('about.farmTitle')}</h2>
@@ -169,4 +183,3 @@ export function AboutPage() {
     </div>
   );
 }
-
