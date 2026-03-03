@@ -364,7 +364,7 @@ export function PaymentPage() {
                     <p className="font-semibold text-[#3D2817]">{t('payment.important')}</p>
                     <p>{t('payment.importantLine1')}</p>
                     <p>{t('payment.importantLine2')}</p>
-                    <p>After payment, admin will call you to coordinate pickup or delivery outside the app.</p>
+                    <p>After payment, admin will call you to coordinate delivery.</p>
                   </div>
                 </div>
 
