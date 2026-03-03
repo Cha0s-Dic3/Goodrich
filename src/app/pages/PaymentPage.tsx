@@ -37,7 +37,6 @@ export function PaymentPage() {
     customerEmail: '',
     fulfillmentMethod: 'delivery' as 'pickup' | 'delivery',
     deliveryAddress: '',
-    deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
     deliveryTimeWindow: '9:00 AM - 12:00 PM',
     notes: '',
@@ -82,13 +81,9 @@ export function PaymentPage() {
     }
   }, [authUser, orderData.customerName]);
 
-  const deliveryFees: { [key in 'local' | 'regional' | 'national']: number } = {
-    local: 3000,
-    regional: 10000,
-    national: 15000
-  };
-
-  const deliveryFee = orderData.fulfillmentMethod === 'pickup' ? 0 : deliveryFees[orderData.deliveryZone];
+  const totalTrays = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const deliveryFeePerTray = 300;
+  const deliveryFee = orderData.fulfillmentMethod === 'pickup' ? 0 : totalTrays * deliveryFeePerTray;
   const totalAmount = cartTotal + deliveryFee;
 
   const normalizeRwandaPhone = (value: string) => {
@@ -166,7 +161,6 @@ export function PaymentPage() {
             items: cart,
             totalAmount: cartTotal,
             deliveryFee,
-            deliveryZone: orderData.deliveryZone,
             fulfillmentMethod: orderData.fulfillmentMethod,
             customerId: orderData.customerId || authUser?.customerId
           }

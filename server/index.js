@@ -62,6 +62,7 @@ const DELIVERY_FEES = {
   regional: 10000,
   national: 15000
 };
+const DELIVERY_FEE_PER_TRAY = 300;
 const MAX_ADMIN_LIMIT = 1000;
 const SUPPORTED_LANGUAGES = ['en', 'rw', 'sw', 'fr'];
 const DEFAULT_CONTENT_LANGUAGE = 'en';
@@ -286,6 +287,7 @@ const orderSchema = new mongoose.Schema(
     customerEmail: { type: String, default: '' },
     items: { type: [orderItemSchema], default: [] },
     totalAmount: { type: Number, default: 0 },
+    fulfillmentMethod: { type: String, default: 'delivery' },
     deliveryZone: { type: String, default: 'local' },
     deliveryFee: { type: Number, default: 0 },
     deliveryAddress: { type: String, default: '' },
@@ -593,6 +595,15 @@ const normalizeRwandaPhone = (value) => {
 
 const isValidRwandaPhone = (value) => /^\+2507\d{8}$/.test(String(value || ''));
 
+const calculateDeliveryFeeByQuantity = (items, fulfillmentMethod) => {
+  if (fulfillmentMethod === 'pickup') return 0;
+  const totalQty = (Array.isArray(items) ? items : []).reduce(
+    (sum, item) => sum + Number(item?.quantity || 0),
+    0
+  );
+  return Math.max(0, totalQty * DELIVERY_FEE_PER_TRAY);
+};
+
 const paginateList = (items, req) => {
   const limitRaw = req.query.limit ? Number(req.query.limit) : null;
   const offsetRaw = req.query.offset ? Number(req.query.offset) : 0;
@@ -711,17 +722,13 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
   if (!isValidRwandaPhone(normalizedPhone)) {
     throw new Error('Invalid Rwanda phone number');
   }
-  const deliveryZone =
-    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
-      ? payload.deliveryZone
-      : 'local';
-  const computedDeliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
+  const fulfillmentMethod = payload.fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery';
+  const deliveryZone = 'local';
+  const computedDeliveryFee = calculateDeliveryFeeByQuantity(items, fulfillmentMethod);
   const deliveryFee =
     typeof overrides.deliveryFee === 'number'
       ? overrides.deliveryFee
-      : typeof payload.deliveryFee === 'number'
-        ? payload.deliveryFee
-        : computedDeliveryFee;
+      : computedDeliveryFee;
   const subtotal = items.reduce(
     (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
     0
@@ -732,6 +739,9 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
       : typeof payload.totalAmount === 'number'
         ? payload.totalAmount
         : subtotal;
+  if (fulfillmentMethod === 'delivery' && !String(payload.deliveryAddress || '').trim()) {
+    throw new Error('Delivery address is required');
+  }
 
   const order = {
     id: nextId('ORD', data.orders),
@@ -742,9 +752,10 @@ const createOrderRecord = (data, user, payload, overrides = {}) => {
     customerEmail: payload.customerEmail || user.email,
     items,
     totalAmount,
+    fulfillmentMethod,
     deliveryZone,
     deliveryFee,
-    deliveryAddress: payload.deliveryAddress || '',
+    deliveryAddress: fulfillmentMethod === 'delivery' ? payload.deliveryAddress || '' : '',
     locationMeta: payload.locationMeta || null,
     deliveryDate: payload.deliveryDate || '',
     deliveryTimeWindow: payload.deliveryTimeWindow || '',
@@ -879,6 +890,10 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
   if (!isValidRwandaPhone(normalizedPhone)) {
     return res.status(400).json({ error: 'Invalid Rwanda phone number' });
   }
+  const fulfillmentMethod = payload.fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery';
+  if (fulfillmentMethod === 'delivery' && !String(payload.deliveryAddress || '').trim()) {
+    return res.status(400).json({ error: 'Delivery address is required' });
+  }
 
   let items;
   try {
@@ -887,11 +902,8 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Order items required' });
   }
 
-  const deliveryZone =
-    payload.deliveryZone === 'regional' || payload.deliveryZone === 'national'
-      ? payload.deliveryZone
-      : 'local';
-  const deliveryFee = DELIVERY_FEES[deliveryZone] ?? DELIVERY_FEES.local;
+  const deliveryZone = 'local';
+  const deliveryFee = calculateDeliveryFeeByQuantity(items, fulfillmentMethod);
   const subtotal = items.reduce(
     (sum, item) => sum + Number(item.product.price || 0) * Number(item.quantity || 0),
     0
@@ -915,7 +927,8 @@ app.post('/api/payments/manual', authMiddleware, async (req, res) => {
       customerName: payload.customerName || user.name,
       customerPhone: normalizedPhone,
       customerEmail: payload.customerEmail || user.email,
-      deliveryAddress: payload.deliveryAddress || '',
+      fulfillmentMethod,
+      deliveryAddress: fulfillmentMethod === 'delivery' ? payload.deliveryAddress || '' : '',
       locationMeta: payload.locationMeta || null,
       deliveryDate: payload.deliveryDate || '',
       deliveryTimeWindow: payload.deliveryTimeWindow || '',

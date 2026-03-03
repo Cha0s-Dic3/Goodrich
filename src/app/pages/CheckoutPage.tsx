@@ -19,7 +19,6 @@ export function CheckoutPage() {
     customerEmail: '',
     fulfillmentMethod: 'delivery' as 'pickup' | 'delivery',
     deliveryAddress: '',
-    deliveryZone: 'local' as 'local' | 'regional' | 'national',
     deliveryDate: '',
     deliveryTimeWindow: '9:00 AM - 12:00 PM',
     notes: '',
@@ -54,13 +53,9 @@ export function CheckoutPage() {
     }
   }, [authUser]);
 
-  const deliveryFees = {
-    local: 3000,
-    regional: 10000,
-    national: 15000
-  };
-
-  const deliveryFee = formData.fulfillmentMethod === 'pickup' ? 0 : deliveryFees[formData.deliveryZone];
+  const totalTrays = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const deliveryFeePerTray = 300;
+  const deliveryFee = formData.fulfillmentMethod === 'pickup' ? 0 : totalTrays * deliveryFeePerTray;
   const totalAmount = cartTotal + deliveryFee;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -360,27 +355,7 @@ export function CheckoutPage() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label htmlFor="deliveryZone" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                            {t('checkout.deliveryZone')} *
-                          </label>
-                          <Select
-                            value={formData.deliveryZone}
-                            onValueChange={(value) => handleSelectChange('deliveryZone', value)}
-                            disabled={formData.fulfillmentMethod === 'pickup'}
-                          >
-                            <SelectTrigger className="border-[#D2B48C]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="local">{t('checkout.zone.local')}</SelectItem>
-                              <SelectItem value="regional">{t('checkout.zone.regional')}</SelectItem>
-                              <SelectItem value="national">{t('checkout.zone.national')}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div>
+                        <div className="md:col-span-2">
                           <label htmlFor="deliveryDate" className="block text-sm font-semibold text-[#3D2817] mb-2">
                             {t('checkout.preferredDate')}{formData.fulfillmentMethod === 'delivery' ? ' *' : ''}
                           </label>
