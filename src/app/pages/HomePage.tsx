@@ -59,11 +59,11 @@ export function HomePage() {
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold text-[#3D2817] mb-6">
-              Goodrich Chicken Farm – Fresh Eggs & Poultry in Rwanda
+              Goodrich Poultry Farm - Fresh Eggs & Quality Chicken in Rwanda
             </h1>
             <p className="text-lg text-[#3D2817] leading-relaxed mb-4">
-              Goodrich Chicken Farm is a trusted poultry farm located in Eastern Province, Kayonza District, Rwanda.
-              Founded and managed by HABAKURAMA Jean Dieu, our farm produces high-quality fresh eggs and chicken products using ethical and sustainable farming practices.
+              Goodrich Poultry Farm is located in Eastern Province, Kayonza District, Rukara Sector, Kawangire Cell, Rwanda.
+              Founded and managed by HABAKURAMA Jean Dieu, our farm raises up to 5,000 chickens using ethical, sustainable, and modern poultry farming practices.
             </p>
             <p className="text-lg text-[#3D2817] leading-relaxed">
               We serve households, restaurants, and markets across Rwanda with reliable delivery services and guaranteed freshness.
