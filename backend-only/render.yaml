@@ -7,6 +7,10 @@ services:
     buildCommand: npm ci --include=dev --no-audit --no-fund
     startCommand: npm start
     healthCheckPath: /api/health
+    redirects:
+      - source: /*
+        destination: /index.html
+        statusCode: 200
     envVars:
       - key: NODE_VERSION
         value: 20.19.0
