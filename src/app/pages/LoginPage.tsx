@@ -8,12 +8,11 @@ import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 
 export function LoginPage() {
-  const { setCurrentPage, userLogin, isUserLoggedIn, isAdmin, adminLogin } = useApp();
+  const { setCurrentPage, userLogin, isUserLoggedIn } = useApp();
   const { t } = useI18n();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAdminMode, setIsAdminMode] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -48,20 +47,6 @@ export function LoginPage() {
     e.preventDefault();
 
     if (isSubmitting) return;
-    if (isAdmin) {
-      toast.error(t('login.adminLoggedIn'));
-      return;
-    }
-
-    // Handle admin login
-    if (isAdminMode) {
-      const success = adminLogin(formData.email, formData.password);
-      if (success) {
-        toast.success('Admin logged in successfully!');
-        setCurrentPage('admin');
-      }
-      return;
-    }
 
     if (isLogin) {
       if (!formData.email || !formData.password) {
@@ -115,12 +100,12 @@ export function LoginPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold text-[#FFFDD0] mb-4">
-              {isAdminMode ? 'Admin Login' : (isLogin ? t('login.welcomeBack') : t('login.createAccount'))}
+              {isLogin ? t('login.welcomeBack') : t('login.createAccount')}
             </h1>
             <p className="text-lg text-[#FAF3E0]">
-              {isAdminMode ? 'Sign in to manage the store' : (isLogin
+              {isLogin
                 ? t('login.signInDesc')
-                : t('login.createDesc'))}
+                : t('login.createDesc')}
             </p>
           </div>
         </div>
@@ -136,7 +121,7 @@ export function LoginPage() {
                 {!isLogin && (
                   <div>
                     <label htmlFor="name" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                      {isAdminMode ? 'Admin Username' : t('login.fullName')}
+                      {t('login.fullName')}
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
@@ -144,7 +129,7 @@ export function LoginPage() {
                         id="name"
                         name="name"
                         type="text"
-                        placeholder={isAdminMode ? 'Enter admin username' : t('login.fullNamePlaceholder')}
+                        placeholder={t('login.fullNamePlaceholder')}
                         value={formData.name}
                         onChange={handleInputChange}
                         className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -156,15 +141,15 @@ export function LoginPage() {
                 {/* Email Field */}
                 <div>
                   <label htmlFor="email" className="block text-sm font-semibold text-[#3D2817] mb-2">
-                    {isAdminMode ? 'Admin Username' : t('login.emailAddress')}
+                    {t('login.emailAddress')}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-5 w-5 text-[#A0522D]" />
                     <Input
                       id="email"
                       name="email"
-                      type={isAdminMode ? 'text' : 'email'}
-                      placeholder={isAdminMode ? 'Enter admin username' : t('login.emailPlaceholder')}
+                      type="email"
+                      placeholder={t('login.emailPlaceholder')}
                       value={formData.email}
                       onChange={handleInputChange}
                       className="pl-10 border-[#D2B48C] focus:border-[#FFD700]"
@@ -273,38 +258,6 @@ export function LoginPage() {
                   {t('login.continueShopping')}
                 </button>
               </div>
-
-              {/* Admin Login Link - Hidden */}
-              {!isAdminMode && (
-                <div className="mt-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAdminMode(true);
-                      setFormData({ email: '', password: '', name: '', confirmPassword: '' });
-                    }}
-                    className="text-xs text-[#A0522D] hover:text-[#8B4513] transition-colors opacity-30 hover:opacity-100"
-                  >
-                    Admin Login
-                  </button>
-                </div>
-              )}
-
-              {/* Back to User Login from Admin */}
-              {isAdminMode && (
-                <div className="mt-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAdminMode(false);
-                      setFormData({ email: '', password: '', name: '', confirmPassword: '' });
-                    }}
-                    className="text-sm text-[#A0522D] hover:text-[#8B4513] transition-colors"
-                  >
-                    ← Back to Customer Login
-                  </button>
-                </div>
-              )}
             </Card>
           </div>
         </div>

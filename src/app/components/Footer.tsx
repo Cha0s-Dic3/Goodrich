@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { useI18n } from '../hooks/useI18n';
 
 export function Footer() {
-  const { setCurrentPage, isAdmin } = useApp();
+  const { setCurrentPage } = useApp();
   const { t } = useI18n();
 
   return (
@@ -89,17 +89,6 @@ export function Footer() {
                   {t('footer.links.orders')}
                 </button>
               </li>
-              {/* Hidden Admin Link - Only visible to admins */}
-              {isAdmin && (
-                <li className="mt-2 pt-2 border-t border-[#A0522D]">
-                  <button
-                    onClick={() => setCurrentPage('admin')}
-                    className="text-[#FFD700] hover:text-[#FF6B6B] transition-colors font-semibold"
-                  >
-                    {t('footer.links.admin') || 'Admin Dashboard'}
-                  </button>
-                </li>
-              )}
             </ul>
           </div>
 
