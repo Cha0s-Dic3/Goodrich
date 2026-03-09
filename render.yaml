@@ -8,6 +8,9 @@ services:
     startCommand: npm run start
     healthCheckPath: /
     redirects:
+      - source: /favicon.ico
+        destination: /favicon.png
+        statusCode: 301
       - source: /*
         destination: /index.html
         statusCode: 200
@@ -22,5 +25,4 @@ services:
         sync: false
       - key: MONGODB_URI
         sync: false
-
 
