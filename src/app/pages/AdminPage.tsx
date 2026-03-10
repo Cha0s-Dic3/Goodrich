@@ -44,13 +44,13 @@ export function AdminPage() {
     }
   }, [isAdmin]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isUserLoggedIn) {
       toast.error(t('admin.userLoggedIn'));
       return;
     }
-    const success = adminLogin(loginData.username, loginData.password);
+    const success = await adminLogin(loginData.username, loginData.password);
     if (!success) {
       toast.error(adminLoginError || t('admin.invalidCredentials'));
     }

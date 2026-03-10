@@ -12,6 +12,7 @@ import { GalleryPage } from './pages/GalleryPage';
 import { ContactPage } from './pages/ContactPage';
 import { CartPage } from './pages/CartPage';
 import { AdminPage } from './pages/AdminPage';
+import { SetupSecurityPage } from './pages/SetupSecurityPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -104,6 +105,8 @@ function AppContent() {
       const path = window.location.pathname.toLowerCase();
       if (path === '/admin-dashboard') {
         setCurrentPage('admin');
+      } else if (path === '/setup-security') {
+        setCurrentPage('setup-security');
       } else if (path === '/account') {
         setCurrentPage('account');
       } else if (path === '/forgot-password') {
@@ -173,6 +176,8 @@ function AppContent() {
         return <AnnouncementsPage />;
       case 'admin':
         return <AdminPage />;
+      case 'setup-security':
+        return <SetupSecurityPage />;
       case 'account':
         return <AccountPage />;
       default:

@@ -14,15 +14,17 @@ interface AccountRow {
 }
 
 export function CustomerAccounts() {
-  const { customers, orders, loadCustomers, loadOrders } = useApp();
+  const { customers, orders, loadCustomers, loadOrders, adminToken } = useApp();
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
 
   useEffect(() => {
-    fetch(toApiUrl('/api/admin/accounts?limit=1000'))
+    fetch(toApiUrl('/api/admin/accounts?limit=1000'), {
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+    })
       .then((res) => res.json())
       .then((data) => setAccounts(data.accounts || []))
       .catch(() => setAccounts([]));
-  }, []);
+  }, [adminToken]);
 
   useEffect(() => {
     loadCustomers();

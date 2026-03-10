@@ -33,6 +33,8 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || '';
 const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MUREKEYISONI Francine';
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
+const SUPER_ADMIN_USERNAME = process.env.SUPER_ADMIN_USERNAME || 'GoodrichSuperAdmin';
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'change-me';
 
 if (CLOUDINARY_URL) {
   cloudinary.config({ secure: true });
@@ -212,7 +214,9 @@ const emptyData = () => ({
   passwordResets: [],
   announcements: [],
   messages: [],
-  gallery: []
+  gallery: [],
+  admins: [],
+  security: []
 });
 
 const DATA_PARTS = [
@@ -224,7 +228,9 @@ const DATA_PARTS = [
   'passwordResets',
   'announcements',
   'messages',
-  'gallery'
+  'gallery',
+  'admins',
+  'security'
 ];
 
 const localizedTextSchema = new mongoose.Schema({}, { _id: false, strict: false });
@@ -394,6 +400,33 @@ const gallerySchema = new mongoose.Schema(
   { strict: false, versionKey: false }
 );
 
+const adminSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    name: { type: String, default: '' },
+    username: { type: String, required: true, index: true, unique: true },
+    email: { type: String, default: '' },
+    passwordHash: { type: String, default: '' },
+    role: { type: String, default: 'admin' },
+    active: { type: Boolean, default: true },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String },
+    lastLoginAt: { type: String }
+  },
+  { strict: false, versionKey: false }
+);
+
+const securitySchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    lockdown: { type: Boolean, default: false },
+    lockdownReason: { type: String, default: '' },
+    updatedAt: { type: String, default: '' },
+    updatedBy: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const Customer = mongoose.models.Customer || mongoose.model('Customer', customerSchema);
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
@@ -405,6 +438,8 @@ const PasswordReset =
 const Announcement = mongoose.models.Announcement || mongoose.model('Announcement', announcementSchema);
 const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
 const Gallery = mongoose.models.Gallery || mongoose.model('Gallery', gallerySchema);
+const Admin = mongoose.models.Admin || mongoose.model('Admin', adminSchema);
+const Security = mongoose.models.Security || mongoose.model('Security', securitySchema);
 
 const MODEL_MAP = {
   users: User,
@@ -415,7 +450,9 @@ const MODEL_MAP = {
   passwordResets: PasswordReset,
   announcements: Announcement,
   messages: Message,
-  gallery: Gallery
+  gallery: Gallery,
+  admins: Admin,
+  security: Security
 };
 
 let mongoWriteQueue = Promise.resolve();
@@ -450,7 +487,9 @@ const normalizeData = (data) => ({
   passwordResets: Array.isArray(data?.passwordResets) ? data.passwordResets : [],
   announcements: Array.isArray(data?.announcements) ? data.announcements : [],
   messages: Array.isArray(data?.messages) ? data.messages : [],
-  gallery: Array.isArray(data?.gallery) ? data.gallery : []
+  gallery: Array.isArray(data?.gallery) ? data.gallery : [],
+  admins: Array.isArray(data?.admins) ? data.admins : [],
+  security: Array.isArray(data?.security) ? data.security : []
 });
 
 const getPartPath = (part) => path.join(DATA_DIR, `${part}.json`);
@@ -581,6 +620,45 @@ const saveData = async (data) => {
     return saveDataToMongo(data);
   }
   return saveDataToFiles(data);
+};
+
+const DEFAULT_SECURITY = {
+  id: 'security',
+  lockdown: false,
+  lockdownReason: '',
+  updatedAt: '',
+  updatedBy: ''
+};
+
+const getSecurity = (data) => {
+  if (!Array.isArray(data.security) || data.security.length === 0) {
+    data.security = [{ ...DEFAULT_SECURITY }];
+  }
+  return data.security[0];
+};
+
+const ensureAdminSeed = async () => {
+  const data = await loadData();
+  if (Array.isArray(data.admins) && data.admins.length > 0) return;
+  const now = new Date().toISOString();
+  const passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+  data.admins = [
+    {
+      id: 'ADMIN-001',
+      name: 'Super Admin',
+      username: SUPER_ADMIN_USERNAME,
+      email: '',
+      passwordHash,
+      role: 'super_admin',
+      active: true,
+      createdAt: now
+    }
+  ];
+  data.security = [{ ...DEFAULT_SECURITY, updatedAt: now, updatedBy: 'system' }];
+  if (SUPER_ADMIN_PASSWORD === 'change-me') {
+    console.warn('Super admin password is using the default. Set SUPER_ADMIN_PASSWORD.');
+  }
+  await saveData(data);
 };
 
 const nextId = (prefix, items) => {
@@ -895,10 +973,197 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+const adminAuthMiddleware = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: 'Missing admin token' });
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload?.type !== 'admin') {
+      return res.status(403).json({ error: 'Invalid admin token' });
+    }
+    req.adminId = payload.sub;
+    req.adminRole = payload.role;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid admin token' });
+  }
+};
+
+const requireSuperAdmin = (req, res, next) => {
+  if (req.adminRole !== 'super_admin') {
+    return res.status(403).json({ error: 'Super admin access required' });
+  }
+  return next();
+};
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+const sanitizeAdmin = (admin) => ({
+  id: admin.id,
+  name: admin.name || '',
+  username: admin.username,
+  role: admin.role || 'admin',
+  active: admin.active !== false,
+  createdAt: admin.createdAt,
+  lastLoginAt: admin.lastLoginAt
+});
+
+app.post('/api/admin/auth/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Missing username or password' });
+  }
+
+  const data = await loadData();
+  const security = getSecurity(data);
+  const admin = data.admins.find(
+    (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
+  );
+
+  if (!admin || admin.active === false) {
+    return res.status(401).json({ error: 'Invalid admin credentials' });
+  }
+
+  if (security.lockdown && admin.role !== 'super_admin') {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
+
+  const ok = await bcrypt.compare(String(password), String(admin.passwordHash || ''));
+  if (!ok) {
+    return res.status(401).json({ error: 'Invalid admin credentials' });
+  }
+
+  const now = new Date().toISOString();
+  admin.lastLoginAt = now;
+  admin.updatedAt = now;
+  await saveData(data);
+
+  const token = jwt.sign({ sub: admin.id, role: admin.role, type: 'admin' }, JWT_SECRET, {
+    expiresIn: '8h'
+  });
+  return res.json({ token, admin: sanitizeAdmin(admin) });
+});
+
+app.use('/api/admin', (req, res, next) => {
+  if (req.path.startsWith('/auth/login')) {
+    return next();
+  }
+  return adminAuthMiddleware(req, res, next);
+});
+
+app.use('/api/super-admin', adminAuthMiddleware, requireSuperAdmin);
+
+app.get('/api/super-admin/admins', async (req, res) => {
+  const data = await loadData();
+  return res.json({ admins: data.admins.map(sanitizeAdmin) });
+});
+
+app.post('/api/super-admin/admins', async (req, res) => {
+  const { name, username, password, role } = req.body || {};
+  if (!name || !username || !password) {
+    return res.status(400).json({ error: 'Name, username, and password are required' });
+  }
+
+  const data = await loadData();
+  const exists = data.admins.some(
+    (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
+  );
+  if (exists) {
+    return res.status(400).json({ error: 'Username already exists' });
+  }
+
+  const now = new Date().toISOString();
+  const passwordHash = await bcrypt.hash(String(password), 10);
+  const admin = {
+    id: nextId('ADMIN', data.admins),
+    name: String(name),
+    username: String(username),
+    passwordHash,
+    role: role === 'super_admin' ? 'super_admin' : 'admin',
+    active: true,
+    createdAt: now
+  };
+  data.admins.unshift(admin);
+  await saveData(data);
+  return res.status(201).json({ admin: sanitizeAdmin(admin) });
+});
+
+app.patch('/api/super-admin/admins/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, username, password, role, active } = req.body || {};
+  const data = await loadData();
+  const admin = data.admins.find((entry) => entry.id === id);
+  if (!admin) {
+    return res.status(404).json({ error: 'Admin not found' });
+  }
+
+  if (username && String(username).toLowerCase() !== admin.username.toLowerCase()) {
+    const exists = data.admins.some(
+      (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
+    );
+    if (exists) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    admin.username = String(username);
+  }
+
+  if (name !== undefined) admin.name = String(name);
+  if (role) admin.role = role === 'super_admin' ? 'super_admin' : 'admin';
+  if (typeof active === 'boolean') admin.active = active;
+  if (password) {
+    admin.passwordHash = await bcrypt.hash(String(password), 10);
+  }
+  admin.updatedAt = new Date().toISOString();
+  await saveData(data);
+  return res.json({ admin: sanitizeAdmin(admin) });
+});
+
+app.delete('/api/super-admin/admins/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = await loadData();
+  const admin = data.admins.find((entry) => entry.id === id);
+  if (!admin) {
+    return res.status(404).json({ error: 'Admin not found' });
+  }
+
+  if (id === req.adminId) {
+    return res.status(400).json({ error: 'Cannot delete your own account' });
+  }
+
+  if (admin.role === 'super_admin') {
+    const superAdmins = data.admins.filter((entry) => entry.role === 'super_admin');
+    if (superAdmins.length <= 1) {
+      return res.status(400).json({ error: 'Cannot delete the last super admin' });
+    }
+  }
+
+  data.admins = data.admins.filter((entry) => entry.id !== id);
+  await saveData(data);
+  return res.json({ ok: true });
+});
+
+app.get('/api/super-admin/security', async (req, res) => {
+  const data = await loadData();
+  const security = getSecurity(data);
+  return res.json({ security });
+});
+
+app.post('/api/super-admin/security/lockdown', async (req, res) => {
+  const { enabled, reason } = req.body || {};
+  const data = await loadData();
+  const security = getSecurity(data);
+  security.lockdown = Boolean(enabled);
+  security.lockdownReason = String(reason || '');
+  security.updatedAt = new Date().toISOString();
+  security.updatedBy = req.adminId || '';
+  await saveData(data);
+  return res.json({ security });
+});
 
 
 app.post('/api/auth/register', async (req, res) => {
@@ -908,6 +1173,10 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   const data = await loadData();
+  const security = getSecurity(data);
+  if (security.lockdown) {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
   const existing = data.users.find(
     (user) => user.email.toLowerCase() === String(email).toLowerCase()
   );
@@ -1145,6 +1414,10 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const data = await loadData();
+  const security = getSecurity(data);
+  if (security.lockdown) {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
   const user = data.users.find(
     (entry) => entry.email.toLowerCase() === String(email).toLowerCase()
   );
@@ -1178,6 +1451,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 
   const data = await loadData();
+  const security = getSecurity(data);
+  if (security.lockdown) {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
   const user = data.users.find(
     (entry) => entry.email.toLowerCase() === String(email).toLowerCase()
   );
@@ -1214,6 +1491,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 
   const data = await loadData();
+  const security = getSecurity(data);
+  if (security.lockdown) {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
   const emailLower = String(email).toLowerCase();
   const reset = data.passwordResets.find((entry) => {
     if (!entry || !entry.token || entry.token !== token) return false;
@@ -1834,6 +2115,7 @@ const runningInFunction = Boolean(process.env.FUNCTION_TARGET || process.env.K_S
 if (!runningInFunction) {
   await ensureUploadsDir();
   await connectMongo();
+  await ensureAdminSeed();
   app.listen(PORT, () => {
     console.log(`API server listening on http://localhost:${PORT}`);
   });

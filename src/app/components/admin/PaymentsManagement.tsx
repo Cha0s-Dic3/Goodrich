@@ -9,7 +9,7 @@ import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 
 export function PaymentsManagement() {
-  const { payments, loadPayments } = useApp();
+  const { payments, loadPayments, adminToken } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -18,7 +18,7 @@ export function PaymentsManagement() {
 
   useEffect(() => {
     loadPayments('admin');
-  }, []);
+  }, [adminToken]);
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return payments;
@@ -51,7 +51,10 @@ export function PaymentsManagement() {
     if (isUpdating) return;
     setIsUpdating(id);
     try {
-      const res = await fetch(`/api/admin/payments/approve/${id}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/payments/approve/${id}`, {
+        method: 'POST',
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || 'Failed to approve payment');
@@ -71,7 +74,7 @@ export function PaymentsManagement() {
     try {
       const res = await fetch(`/api/admin/payments/cancel/${id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
         body: JSON.stringify({ reason: reason || 'Payment not received' })
       });
       const data = await res.json().catch(() => ({}));

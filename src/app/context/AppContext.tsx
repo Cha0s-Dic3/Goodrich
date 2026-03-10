@@ -58,6 +58,13 @@ export interface UserAccount {
   avatarUrl?: string;
 }
 
+export interface AdminAccount {
+  id: string;
+  name: string;
+  username: string;
+  role: 'super_admin' | 'admin';
+}
+
 export interface Announcement {
   id: string;
   title: string;
@@ -173,9 +180,12 @@ interface AppContextType {
 
   // Admin Auth
   isAdmin: boolean;
-  adminLogin: (username: string, password: string) => boolean;
+  adminLogin: (username: string, password: string) => Promise<boolean>;
   adminLoginError: string | null;
   adminLogout: () => void;
+  adminToken: string | null;
+  adminUser: AdminAccount | null;
+  isSuperAdmin: boolean;
 
   // User auth
   isUserLoggedIn: boolean;
@@ -238,10 +248,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('isAdmin') === 'true';
-  });
   const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    return localStorage.getItem('adminToken');
+  });
+  const [adminUser, setAdminUser] = useState<AdminAccount | null>(() => {
+    const saved = localStorage.getItem('adminUser');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('isUserLoggedIn') === 'true';
@@ -270,9 +284,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('cart', JSON.stringify(cart));
   }, [cart]);
 
+  const isAdmin = Boolean(adminToken);
+  const isSuperAdmin = adminUser?.role === 'super_admin';
+
   useEffect(() => {
-    localStorage.setItem('isAdmin', isAdmin.toString());
-  }, [isAdmin]);
+    if (adminToken) {
+      localStorage.setItem('adminToken', adminToken);
+    } else {
+      localStorage.removeItem('adminToken');
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    if (adminUser) {
+      localStorage.setItem('adminUser', JSON.stringify(adminUser));
+    } else {
+      localStorage.removeItem('adminUser');
+    }
+  }, [adminUser]);
 
   useEffect(() => {
     localStorage.setItem('isUserLoggedIn', isUserLoggedIn.toString());
@@ -328,7 +357,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateProduct = async (productId: string, updates: Partial<Product>) => {
     const data = await fetchJson(`/api/admin/products/${productId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...updates, lang: language })
     });
     setProducts(prev => prev.map(p => (p.id === productId ? data.product : p)));
@@ -337,14 +366,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addProduct = async (product: Omit<Product, 'id'>) => {
     const data = await fetchJson('/api/admin/products', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...product, lang: language })
     });
     setProducts(prev => [data.product, ...prev]);
   };
 
   const deleteProduct = async (productId: string) => {
-    await fetchJson(`/api/admin/products/${productId}`, { method: 'DELETE' });
+    await fetchJson(`/api/admin/products/${productId}`, {
+      method: 'DELETE',
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+    });
     setProducts(prev => prev.filter(p => p.id !== productId));
   };
 
@@ -364,7 +396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addAnnouncement = async (announcement: Omit<Announcement, 'id' | 'createdAt'>) => {
     const data = await fetchJson('/api/admin/announcements', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...announcement, lang: language })
     });
     setAnnouncements(prev => [data.announcement, ...prev]);
@@ -373,14 +405,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateAnnouncement = async (id: string, updatedData: Partial<Announcement>) => {
     const data = await fetchJson(`/api/admin/announcements/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...updatedData, lang: language })
     });
     setAnnouncements(prev => prev.map(a => (a.id === id ? data.announcement : a)));
   };
 
   const deleteAnnouncement = async (id: string) => {
-    await fetchJson(`/api/admin/announcements/${id}`, { method: 'DELETE' });
+    await fetchJson(`/api/admin/announcements/${id}`, {
+      method: 'DELETE',
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+    });
     setAnnouncements(prev => prev.filter(a => a.id !== id));
   };
 
@@ -396,7 +431,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addGalleryItem = async (item: Omit<GalleryItem, 'id' | 'createdAt'>) => {
     const data = await fetchJson('/api/admin/gallery', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...item, lang: language })
     });
     setGallery(prev => [{ ...data.item, imageUrl: toAssetUrl(data.item?.imageUrl || '') }, ...prev]);
@@ -409,7 +444,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateGalleryItem = async (id: string, item: Partial<GalleryItem>) => {
     const data = await fetchJson(`/api/admin/gallery/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ ...item, lang: language })
     });
     setGallery(prev =>
@@ -420,13 +455,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteGalleryItem = async (id: string) => {
-    await fetchJson(`/api/admin/gallery/${id}`, { method: 'DELETE' });
+    await fetchJson(`/api/admin/gallery/${id}`, {
+      method: 'DELETE',
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+    });
     setGallery(prev => prev.filter(entry => entry.id !== id));
   };
 
   const loadMessages = async () => {
     try {
-      const data = await fetchJson('/api/admin/messages?limit=1000');
+      const data = await fetchJson('/api/admin/messages?limit=1000', {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+      });
       setMessages(data.messages || []);
     } catch (err) {
       setMessages([]);
@@ -444,14 +484,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateMessageStatus = async (id: string, status: Message['status']) => {
     const data = await fetchJson(`/api/admin/messages/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ status })
     });
     setMessages(prev => prev.map(entry => (entry.id === id ? data.message : entry)));
   };
 
   const deleteMessage = async (id: string) => {
-    await fetchJson(`/api/admin/messages/${id}`, { method: 'DELETE' });
+    await fetchJson(`/api/admin/messages/${id}`, {
+      method: 'DELETE',
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+    });
     setMessages(prev => prev.filter(entry => entry.id !== id));
   };
 
@@ -462,7 +505,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       const data = await fetchJson(scope === 'admin' ? '/api/admin/orders?limit=1000' : '/api/orders/my', {
-        headers: authToken && scope === 'user' ? { Authorization: `Bearer ${authToken}` } : undefined
+        headers:
+          scope === 'admin'
+            ? adminToken
+              ? { Authorization: `Bearer ${adminToken}` }
+              : undefined
+            : authToken
+              ? { Authorization: `Bearer ${authToken}` }
+              : undefined
       });
       setOrders(data.orders || []);
     } catch (err) {
@@ -479,7 +529,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const data = await fetchJson(
         scope === 'admin' ? '/api/admin/payments?limit=1000' : '/api/payments/my',
         {
-          headers: authToken && scope === 'user' ? { Authorization: `Bearer ${authToken}` } : undefined
+          headers:
+            scope === 'admin'
+              ? adminToken
+                ? { Authorization: `Bearer ${adminToken}` }
+                : undefined
+              : authToken
+                ? { Authorization: `Bearer ${authToken}` }
+                : undefined
         }
       );
       setPayments(data.payments || []);
@@ -508,7 +565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     const data = await fetchJson(`/api/admin/orders/${orderId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
       body: JSON.stringify({ status })
     });
     setOrders(prev => prev.map(order => (order.id === orderId ? data.order : order)));
@@ -525,7 +582,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadCustomers = async () => {
     try {
-      const data = await fetchJson('/api/admin/customers?limit=1000');
+      const data = await fetchJson('/api/admin/customers?limit=1000', {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+      });
       setCustomers(data.customers || []);
     } catch (err) {
       setCustomers([]);
@@ -598,22 +657,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Admin functions
-  const adminLogin = (username: string, password: string): boolean => {
+  const adminLogin = async (username: string, password: string): Promise<boolean> => {
     if (isUserLoggedIn) {
       setAdminLoginError('User is logged in. Log out user account first.');
       return false;
     }
-    if (username === 'Goodrich' && password === '123') {
-      setIsAdmin(true);
+    try {
+      const data = await fetchJson('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      setAdminToken(data.token || null);
+      setAdminUser(data.admin || null);
       setAdminLoginError(null);
       return true;
+    } catch (err: any) {
+      setAdminLoginError(err?.message || 'Invalid admin credentials.');
+      return false;
     }
-    setAdminLoginError('Invalid admin credentials.');
-    return false;
   };
 
   const adminLogout = () => {
-    setIsAdmin(false);
+    setAdminToken(null);
+    setAdminUser(null);
     setAdminLoginError(null);
   };
 
@@ -637,6 +704,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Update browser URL for all pages
     if (page === 'admin') {
       window.history.pushState({}, '', '/admin-dashboard');
+    } else if (page === 'setup-security') {
+      window.history.pushState({}, '', '/setup-security');
     } else if (page === 'account') {
       window.history.pushState({}, '', '/account');
     } else if (page === 'checkout') {
@@ -725,6 +794,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         adminLogin,
         adminLoginError,
         adminLogout,
+        adminToken,
+        adminUser,
+        isSuperAdmin,
         isUserLoggedIn,
         authUser,
         authToken,

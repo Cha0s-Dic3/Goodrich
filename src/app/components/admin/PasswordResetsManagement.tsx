@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
+import { useApp } from '../../context/AppContext';
 
 interface ResetEntry {
   id: string;
@@ -21,6 +22,7 @@ interface ResetEntry {
 }
 
 export function PasswordResetsManagement() {
+  const { adminToken } = useApp();
   const [resets, setResets] = useState<ResetEntry[]>([]);
   const [filter, setFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +30,9 @@ export function PasswordResetsManagement() {
   const loadResets = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/password-resets?limit=1000');
+      const res = await fetch('/api/admin/password-resets?limit=1000', {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+      });
       const data = await res.json();
       setResets(data.resets || []);
     } catch (err) {
@@ -40,7 +44,7 @@ export function PasswordResetsManagement() {
 
   useEffect(() => {
     loadResets();
-  }, []);
+  }, [adminToken]);
 
   const now = Date.now();
 
@@ -76,7 +80,7 @@ export function PasswordResetsManagement() {
     try {
       const res = await fetch(`/api/admin/password-resets/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
         body: JSON.stringify({ sentAt: true })
       });
       const data = await res.json();
@@ -94,7 +98,8 @@ export function PasswordResetsManagement() {
     if (!confirm(`Delete this ${label} reset request?`)) return;
     try {
       const res = await fetch(`/api/admin/password-resets/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -122,7 +127,10 @@ export function PasswordResetsManagement() {
     let deleted = 0;
     for (const entry of toDelete) {
       try {
-        const res = await fetch(`/api/admin/password-resets/${entry.id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/admin/password-resets/${entry.id}`, {
+          method: 'DELETE',
+          headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
+        });
         if (res.ok) deleted++;
       } catch {
         // continue
