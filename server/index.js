@@ -1804,6 +1804,8 @@ if (NODE_ENV === 'production') {
   app.use(express.static(DIST_PATH));
 }
 
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.png'));
+
 // SPA Fallback - serve index.html for all non-API routes
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {

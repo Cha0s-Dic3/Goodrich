@@ -7,13 +7,6 @@ services:
     buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
     startCommand: npm run start
     healthCheckPath: /
-    redirects:
-      - source: /favicon.ico
-        destination: /favicon.png
-        statusCode: 301
-      - source: /*
-        destination: /index.html
-        statusCode: 200
     envVars:
       - key: NODE_VERSION
         value: 20.19.0
@@ -25,4 +18,3 @@ services:
         sync: false
       - key: MONGODB_URI
         sync: false
-
