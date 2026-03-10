@@ -1014,39 +1014,48 @@ const sanitizeAdmin = (admin) => ({
 });
 
 app.post('/api/admin/auth/login', async (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Missing username or password' });
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Missing username or password' });
+    }
+
+    const data = await loadData();
+    const security = getSecurity(data);
+    const admin = data.admins.find(
+      (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
+    );
+
+    if (!admin || admin.active === false) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+
+    if (security.lockdown && admin.role !== 'super_admin') {
+      return res.status(403).json({ error: 'System is in lockdown mode' });
+    }
+
+    if (!admin.passwordHash) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+
+    const ok = await bcrypt.compare(String(password), String(admin.passwordHash));
+    if (!ok) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+
+    const now = new Date().toISOString();
+    admin.lastLoginAt = now;
+    admin.updatedAt = now;
+    await saveData(data);
+
+    const token = jwt.sign({ sub: admin.id, role: admin.role, type: 'admin' }, JWT_SECRET, {
+      expiresIn: '8h'
+    });
+    return res.json({ token, admin: sanitizeAdmin(admin) });
+  } catch (err) {
+    console.error('Admin login failed:', err?.message || err);
+    return res.status(500).json({ error: 'Admin login failed' });
   }
-
-  const data = await loadData();
-  const security = getSecurity(data);
-  const admin = data.admins.find(
-    (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
-  );
-
-  if (!admin || admin.active === false) {
-    return res.status(401).json({ error: 'Invalid admin credentials' });
-  }
-
-  if (security.lockdown && admin.role !== 'super_admin') {
-    return res.status(403).json({ error: 'System is in lockdown mode' });
-  }
-
-  const ok = await bcrypt.compare(String(password), String(admin.passwordHash || ''));
-  if (!ok) {
-    return res.status(401).json({ error: 'Invalid admin credentials' });
-  }
-
-  const now = new Date().toISOString();
-  admin.lastLoginAt = now;
-  admin.updatedAt = now;
-  await saveData(data);
-
-  const token = jwt.sign({ sub: admin.id, role: admin.role, type: 'admin' }, JWT_SECRET, {
-    expiresIn: '8h'
-  });
-  return res.json({ token, admin: sanitizeAdmin(admin) });
 });
 
 app.use('/api/admin', (req, res, next) => {
