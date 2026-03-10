@@ -35,6 +35,7 @@ const MANUAL_MOMO_RECEIVER_NAME = process.env.MANUAL_MOMO_RECEIVER_NAME || 'MURE
 const MANUAL_MOMO_RECEIVER_PHONE = process.env.MANUAL_MOMO_RECEIVER_PHONE || '0786584808';
 const SUPER_ADMIN_USERNAME = process.env.SUPER_ADMIN_USERNAME || 'GoodrichSuperAdmin';
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'change-me';
+const SUPER_ADMIN_FORCE_RESET = String(process.env.SUPER_ADMIN_FORCE_RESET || '').toLowerCase() === 'true';
 
 if (CLOUDINARY_URL) {
   cloudinary.config({ secure: true });
@@ -639,12 +640,22 @@ const getSecurity = (data) => {
 
 const ensureAdminSeed = async () => {
   const data = await loadData();
-  if (Array.isArray(data.admins) && data.admins.length > 0) return;
   const now = new Date().toISOString();
-  const passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
-  data.admins = [
-    {
-      id: 'ADMIN-001',
+  let updated = false;
+
+  if (!Array.isArray(data.admins)) {
+    data.admins = [];
+    updated = true;
+  }
+
+  let superAdmin = data.admins.find(
+    (entry) => entry.username?.toLowerCase?.() === SUPER_ADMIN_USERNAME.toLowerCase()
+  );
+
+  if (!superAdmin) {
+    const passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+    superAdmin = {
+      id: data.admins.length === 0 ? 'ADMIN-001' : nextId('ADMIN', data.admins),
       name: 'Super Admin',
       username: SUPER_ADMIN_USERNAME,
       email: '',
@@ -652,13 +663,29 @@ const ensureAdminSeed = async () => {
       role: 'super_admin',
       active: true,
       createdAt: now
-    }
-  ];
-  data.security = [{ ...DEFAULT_SECURITY, updatedAt: now, updatedBy: 'system' }];
+    };
+    data.admins.unshift(superAdmin);
+    updated = true;
+  } else if (SUPER_ADMIN_FORCE_RESET) {
+    superAdmin.passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+    superAdmin.role = 'super_admin';
+    superAdmin.active = true;
+    superAdmin.updatedAt = now;
+    updated = true;
+  }
+
+  if (!Array.isArray(data.security) || data.security.length === 0) {
+    data.security = [{ ...DEFAULT_SECURITY, updatedAt: now, updatedBy: 'system' }];
+    updated = true;
+  }
+
   if (SUPER_ADMIN_PASSWORD === 'change-me') {
     console.warn('Super admin password is using the default. Set SUPER_ADMIN_PASSWORD.');
   }
-  await saveData(data);
+
+  if (updated) {
+    await saveData(data);
+  }
 };
 
 const nextId = (prefix, items) => {
@@ -1020,7 +1047,11 @@ app.post('/api/admin/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Missing username or password' });
     }
 
-    const data = await loadData();
+    let data = await loadData();
+    if (!Array.isArray(data.admins) || data.admins.length === 0) {
+      await ensureAdminSeed();
+      data = await loadData();
+    }
     const security = getSecurity(data);
     const admin = data.admins.find(
       (entry) => entry.username.toLowerCase() === String(username).toLowerCase()

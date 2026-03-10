@@ -32,6 +32,8 @@ export function SetupSecurityPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ name: '', username: '', password: '', role: 'admin' });
   const [lockReason, setLockReason] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
 
   const authHeaders = useMemo(
     () => (adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined),
@@ -202,11 +204,19 @@ export function SetupSecurityPage() {
             <div>
               <label className="block mb-2 text-[#3D2817]">Password</label>
               <Input
-                type="password"
+                type={showLoginPassword ? 'text' : 'password'}
                 required
                 value={loginData.password}
                 onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
               />
+              <label className="mt-2 flex items-center gap-2 text-xs text-[#6B5344]">
+                <input
+                  type="checkbox"
+                  checked={showLoginPassword}
+                  onChange={(e) => setShowLoginPassword(e.target.checked)}
+                />
+                Show password
+              </label>
             </div>
             <Button type="submit" className="w-full bg-[#C41E3A] hover:bg-[#FF6B6B] text-white" size="lg">
               Login
@@ -276,7 +286,19 @@ export function SetupSecurityPage() {
             </div>
             <div>
               <label className="block mb-2 text-[#3D2817]">Password</label>
-              <Input type="password" value={newAdmin.password} onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })} />
+              <Input
+                type={showNewAdminPassword ? 'text' : 'password'}
+                value={newAdmin.password}
+                onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
+              />
+              <label className="mt-2 flex items-center gap-2 text-xs text-[#6B5344]">
+                <input
+                  type="checkbox"
+                  checked={showNewAdminPassword}
+                  onChange={(e) => setShowNewAdminPassword(e.target.checked)}
+                />
+                Show password
+              </label>
             </div>
             <div>
               <label className="block mb-2 text-[#3D2817]">Role</label>

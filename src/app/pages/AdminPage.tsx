@@ -33,6 +33,7 @@ export function AdminPage() {
   const { t } = useI18n();
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [showPassword, setShowPassword] = useState(false);
   
   useEffect(() => {
     if (isAdmin) {
@@ -84,13 +85,21 @@ export function AdminPage() {
             <div>
               <label className="block mb-2 text-[#3D2817]">{t('admin.password')}</label>
               <Input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={loginData.password}
                 onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                 placeholder={t('admin.passwordPlaceholder')}
                 className="border-[#D2B48C] focus:border-[#C41E3A]"
               />
+              <label className="mt-2 flex items-center gap-2 text-xs text-[#6B5344]">
+                <input
+                  type="checkbox"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                />
+                Show password
+              </label>
             </div>
             
             <Button
