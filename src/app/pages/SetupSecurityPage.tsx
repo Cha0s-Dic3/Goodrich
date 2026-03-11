@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 interface AdminRow {
   id: string;
   name: string;
+  email: string;
   username: string;
   role: 'super_admin' | 'admin';
   active: boolean;
@@ -24,16 +25,70 @@ interface SecurityState {
   updatedBy?: string;
 }
 
+interface AuditLogEntry {
+  id: string;
+  actorId?: string;
+  actorRole?: string;
+  action: string;
+  target?: string;
+  createdAt: string;
+}
+
+interface LoginAttemptEntry {
+  id: string;
+  actorType: string;
+  usernameOrEmail: string;
+  ip: string;
+  device?: string;
+  os?: string;
+  browser?: string;
+  status: string;
+  createdAt: string;
+}
+
+interface SessionEntry {
+  id: string;
+  type: string;
+  actorId: string;
+  role: string;
+  ip: string;
+  device?: string;
+  os?: string;
+  browser?: string;
+  createdAt: string;
+  lastSeenAt?: string;
+  active?: boolean;
+}
+
+interface BlockedIpEntry {
+  id: string;
+  ip: string;
+  reason?: string;
+}
+
+interface BlockedDeviceEntry {
+  id: string;
+  userAgent: string;
+  reason?: string;
+}
+
 export function SetupSecurityPage() {
   const { isAdmin, isSuperAdmin, adminLogin, adminLoginError, adminToken } = useApp();
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [security, setSecurity] = useState<SecurityState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ name: '', username: '', password: '', role: 'admin' });
+  const [newAdmin, setNewAdmin] = useState({ name: '', email: '', username: '', password: '', role: 'admin' });
   const [lockReason, setLockReason] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [loginAttempts, setLoginAttempts] = useState<LoginAttemptEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [blockedIps, setBlockedIps] = useState<BlockedIpEntry[]>([]);
+  const [blockedDevices, setBlockedDevices] = useState<BlockedDeviceEntry[]>([]);
+  const [ipToBlock, setIpToBlock] = useState('');
+  const [deviceToBlock, setDeviceToBlock] = useState('');
 
   const authHeaders = useMemo(
     () => (adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined),
@@ -63,10 +118,29 @@ export function SetupSecurityPage() {
     }
   };
 
+  const loadLogs = async () => {
+    try {
+      const [logsRes, attemptsRes, sessionsRes] = await Promise.all([
+        fetch('/api/super-admin/security/logs?limit=200', { headers: authHeaders }),
+        fetch('/api/super-admin/security/login-attempts?limit=200', { headers: authHeaders }),
+        fetch('/api/super-admin/security/sessions', { headers: authHeaders })
+      ]);
+      const logsData = await logsRes.json();
+      const attemptsData = await attemptsRes.json();
+      const sessionsData = await sessionsRes.json();
+      if (logsRes.ok) setAuditLogs(logsData.logs || []);
+      if (attemptsRes.ok) setLoginAttempts(attemptsData.attempts || []);
+      if (sessionsRes.ok) setSessions(sessionsData.sessions || []);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (!isAdmin || !isSuperAdmin) return;
     loadAdmins();
     loadSecurity();
+    loadLogs();
   }, [isAdmin, isSuperAdmin, adminToken]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -78,8 +152,8 @@ export function SetupSecurityPage() {
   };
 
   const handleCreateAdmin = async () => {
-    if (!newAdmin.name || !newAdmin.username || !newAdmin.password) {
-      toast.error('Name, username, and password are required.');
+    if (!newAdmin.name || !newAdmin.email || !newAdmin.username || !newAdmin.password) {
+      toast.error('Name, email, username, and password are required.');
       return;
     }
     setIsLoading(true);
@@ -92,7 +166,7 @@ export function SetupSecurityPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create admin');
       setAdmins((prev) => [data.admin, ...prev]);
-      setNewAdmin({ name: '', username: '', password: '', role: 'admin' });
+      setNewAdmin({ name: '', email: '', username: '', password: '', role: 'admin' });
       toast.success('Admin created.');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to create admin');
@@ -177,6 +251,88 @@ export function SetupSecurityPage() {
       toast.error(err?.message || 'Failed to update lockdown');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const terminateSession = async (id: string) => {
+    try {
+      const res = await fetch(`/api/super-admin/security/sessions/${id}/terminate`, {
+        method: 'POST',
+        headers: authHeaders
+      });
+      if (!res.ok) throw new Error('Failed to terminate session');
+      setSessions((prev) => prev.filter((session) => session.id !== id));
+      toast.success('Session terminated.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to terminate session');
+    }
+  };
+
+  const blockIp = async () => {
+    const ip = ipToBlock.trim();
+    if (!ip) return;
+    try {
+      const res = await fetch('/api/super-admin/security/block-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(authHeaders || {}) },
+        body: JSON.stringify({ ip })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to block IP');
+      setBlockedIps(data.blockedIps || []);
+      setIpToBlock('');
+      toast.success('IP blocked.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to block IP');
+    }
+  };
+
+  const unblockIp = async (ip: string) => {
+    try {
+      const res = await fetch('/api/super-admin/security/unblock-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(authHeaders || {}) },
+        body: JSON.stringify({ ip })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to unblock IP');
+      setBlockedIps(data.blockedIps || []);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to unblock IP');
+    }
+  };
+
+  const blockDevice = async () => {
+    const userAgent = deviceToBlock.trim();
+    if (!userAgent) return;
+    try {
+      const res = await fetch('/api/super-admin/security/block-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(authHeaders || {}) },
+        body: JSON.stringify({ userAgent })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to block device');
+      setBlockedDevices(data.blockedDevices || []);
+      setDeviceToBlock('');
+      toast.success('Device blocked.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to block device');
+    }
+  };
+
+  const unblockDevice = async (userAgent: string) => {
+    try {
+      const res = await fetch('/api/super-admin/security/unblock-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(authHeaders || {}) },
+        body: JSON.stringify({ userAgent })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to unblock device');
+      setBlockedDevices(data.blockedDevices || []);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to unblock device');
     }
   };
 
@@ -275,10 +431,14 @@ export function SetupSecurityPage() {
             <h2 className="text-2xl text-[#3D2817]">Admin Management</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div>
               <label className="block mb-2 text-[#3D2817]">Name</label>
               <Input value={newAdmin.name} onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="block mb-2 text-[#3D2817]">Email</label>
+              <Input value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} />
             </div>
             <div>
               <label className="block mb-2 text-[#3D2817]">Username</label>
@@ -322,7 +482,7 @@ export function SetupSecurityPage() {
               <div key={admin.id} className="flex flex-col md:flex-row md:items-center md:justify-between py-4 gap-3">
                 <div>
                   <div className="text-[#3D2817] font-semibold">{admin.name}</div>
-                  <div className="text-sm text-[#6B5344]">{admin.username} • {admin.role}</div>
+                  <div className="text-sm text-[#6B5344]">{admin.email} • {admin.username} • {admin.role}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -350,6 +510,84 @@ export function SetupSecurityPage() {
                     <Trash2 className="h-4 w-4 mr-1" /> Delete
                   </Button>
                 </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+          <h2 className="text-2xl text-[#3D2817] mb-4">Active Sessions</h2>
+          {sessions.length === 0 ? (
+            <p className="text-[#6B5344]">No active sessions.</p>
+          ) : (
+            <div className="divide-y divide-[#F0EAD6]">
+              {sessions.map((session) => (
+                <div key={session.id} className="flex flex-col md:flex-row md:items-center md:justify-between py-3 gap-2">
+                  <div className="text-sm text-[#6B5344]">
+                    {session.type} • {session.actorId} • {session.ip} • {session.browser} • {session.os}
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => terminateSession(session.id)}>
+                    Terminate
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+          <h2 className="text-2xl text-[#3D2817] mb-4">Blocklist</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-2 text-[#3D2817]">Block IP</label>
+              <div className="flex gap-2">
+                <Input value={ipToBlock} onChange={(e) => setIpToBlock(e.target.value)} placeholder="IP address" />
+                <Button onClick={blockIp}>Block</Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {blockedIps.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between text-sm">
+                    <span>{entry.ip}</span>
+                    <Button size="sm" variant="outline" onClick={() => unblockIp(entry.ip)}>Unblock</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block mb-2 text-[#3D2817]">Block Device (User Agent)</label>
+              <div className="flex gap-2">
+                <Input value={deviceToBlock} onChange={(e) => setDeviceToBlock(e.target.value)} placeholder="User agent string" />
+                <Button onClick={blockDevice}>Block</Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {blockedDevices.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate">{entry.userAgent}</span>
+                    <Button size="sm" variant="outline" onClick={() => unblockDevice(entry.userAgent)}>Unblock</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+          <h2 className="text-2xl text-[#3D2817] mb-4">Audit Logs</h2>
+          <div className="space-y-2 max-h-80 overflow-auto text-sm text-[#6B5344]">
+            {auditLogs.map((log) => (
+              <div key={log.id}>
+                {log.createdAt} • {log.action} • {log.target || ''} • {log.actorRole || ''}
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+          <h2 className="text-2xl text-[#3D2817] mb-4">Login Attempts</h2>
+          <div className="space-y-2 max-h-80 overflow-auto text-sm text-[#6B5344]">
+            {loginAttempts.map((attempt) => (
+              <div key={attempt.id}>
+                {attempt.createdAt} • {attempt.actorType} • {attempt.usernameOrEmail} • {attempt.status} • {attempt.ip}
               </div>
             ))}
           </div>

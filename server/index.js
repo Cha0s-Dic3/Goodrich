@@ -217,7 +217,12 @@ const emptyData = () => ({
   messages: [],
   gallery: [],
   admins: [],
-  security: []
+  security: [],
+  auditLogs: [],
+  loginAttempts: [],
+  sessions: [],
+  blockedIps: [],
+  blockedDevices: []
 });
 
 const DATA_PARTS = [
@@ -231,7 +236,12 @@ const DATA_PARTS = [
   'messages',
   'gallery',
   'admins',
-  'security'
+  'security',
+  'auditLogs',
+  'loginAttempts',
+  'sessions',
+  'blockedIps',
+  'blockedDevices'
 ];
 
 const localizedTextSchema = new mongoose.Schema({}, { _id: false, strict: false });
@@ -428,6 +438,75 @@ const securitySchema = new mongoose.Schema(
   { strict: false, versionKey: false }
 );
 
+const auditLogSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    actorId: { type: String, default: '' },
+    actorRole: { type: String, default: '' },
+    action: { type: String, default: '' },
+    target: { type: String, default: '' },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    createdAt: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
+const loginAttemptSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    actorType: { type: String, default: '' },
+    usernameOrEmail: { type: String, default: '' },
+    ip: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    device: { type: String, default: '' },
+    os: { type: String, default: '' },
+    browser: { type: String, default: '' },
+    status: { type: String, default: '' },
+    createdAt: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
+const sessionSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    type: { type: String, default: '' },
+    actorId: { type: String, default: '' },
+    role: { type: String, default: '' },
+    ip: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    device: { type: String, default: '' },
+    os: { type: String, default: '' },
+    browser: { type: String, default: '' },
+    active: { type: Boolean, default: true },
+    createdAt: { type: String, default: '' },
+    lastSeenAt: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
+const blockedIpSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    ip: { type: String, default: '' },
+    reason: { type: String, default: '' },
+    createdAt: { type: String, default: '' },
+    createdBy: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
+const blockedDeviceSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, index: true, unique: true },
+    userAgent: { type: String, default: '' },
+    reason: { type: String, default: '' },
+    createdAt: { type: String, default: '' },
+    createdBy: { type: String, default: '' }
+  },
+  { strict: false, versionKey: false }
+);
+
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 const Customer = mongoose.models.Customer || mongoose.model('Customer', customerSchema);
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
@@ -441,6 +520,11 @@ const Message = mongoose.models.Message || mongoose.model('Message', messageSche
 const Gallery = mongoose.models.Gallery || mongoose.model('Gallery', gallerySchema);
 const Admin = mongoose.models.Admin || mongoose.model('Admin', adminSchema);
 const Security = mongoose.models.Security || mongoose.model('Security', securitySchema);
+const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', auditLogSchema);
+const LoginAttempt = mongoose.models.LoginAttempt || mongoose.model('LoginAttempt', loginAttemptSchema);
+const Session = mongoose.models.Session || mongoose.model('Session', sessionSchema);
+const BlockedIp = mongoose.models.BlockedIp || mongoose.model('BlockedIp', blockedIpSchema);
+const BlockedDevice = mongoose.models.BlockedDevice || mongoose.model('BlockedDevice', blockedDeviceSchema);
 
 const MODEL_MAP = {
   users: User,
@@ -453,7 +537,12 @@ const MODEL_MAP = {
   messages: Message,
   gallery: Gallery,
   admins: Admin,
-  security: Security
+  security: Security,
+  auditLogs: AuditLog,
+  loginAttempts: LoginAttempt,
+  sessions: Session,
+  blockedIps: BlockedIp,
+  blockedDevices: BlockedDevice
 };
 
 let mongoWriteQueue = Promise.resolve();
@@ -490,7 +579,12 @@ const normalizeData = (data) => ({
   messages: Array.isArray(data?.messages) ? data.messages : [],
   gallery: Array.isArray(data?.gallery) ? data.gallery : [],
   admins: Array.isArray(data?.admins) ? data.admins : [],
-  security: Array.isArray(data?.security) ? data.security : []
+  security: Array.isArray(data?.security) ? data.security : [],
+  auditLogs: Array.isArray(data?.auditLogs) ? data.auditLogs : [],
+  loginAttempts: Array.isArray(data?.loginAttempts) ? data.loginAttempts : [],
+  sessions: Array.isArray(data?.sessions) ? data.sessions : [],
+  blockedIps: Array.isArray(data?.blockedIps) ? data.blockedIps : [],
+  blockedDevices: Array.isArray(data?.blockedDevices) ? data.blockedDevices : []
 });
 
 const getPartPath = (part) => path.join(DATA_DIR, `${part}.json`);
@@ -636,6 +730,49 @@ const getSecurity = (data) => {
     data.security = [{ ...DEFAULT_SECURITY }];
   }
   return data.security[0];
+};
+
+const nowIso = () => new Date().toISOString();
+
+const getClientIp = (req) => {
+  const header = req.headers['x-forwarded-for'];
+  if (typeof header === 'string' && header.trim()) {
+    return header.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '';
+};
+
+const getUserAgent = (req) => String(req.headers['user-agent'] || '');
+
+const parseDevice = (ua) => {
+  const lower = ua.toLowerCase();
+  const os =
+    lower.includes('windows') ? 'Windows' :
+    lower.includes('mac os') || lower.includes('macintosh') ? 'macOS' :
+    lower.includes('android') ? 'Android' :
+    lower.includes('iphone') || lower.includes('ipad') ? 'iOS' :
+    lower.includes('linux') ? 'Linux' :
+    'Unknown';
+  const browser =
+    lower.includes('edg/') ? 'Edge' :
+    lower.includes('chrome/') && !lower.includes('edg/') ? 'Chrome' :
+    lower.includes('safari/') && !lower.includes('chrome/') ? 'Safari' :
+    lower.includes('firefox/') ? 'Firefox' :
+    'Unknown';
+  return { os, browser, device: ua.slice(0, 120) };
+};
+
+const addAuditLog = async (data, entry) => {
+  const log = {
+    id: nextId('LOG', data.auditLogs),
+    createdAt: nowIso(),
+    ...entry
+  };
+  data.auditLogs.unshift(log);
+  if (data.auditLogs.length > 2000) {
+    data.auditLogs = data.auditLogs.slice(0, 2000);
+  }
+  await saveData(data);
 };
 
 const ensureAdminSeed = async () => {
@@ -993,7 +1130,27 @@ const authMiddleware = async (req, res, next) => {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    const data = await loadData();
+    const security = getSecurity(data);
+    if (security.lockdown) {
+      return res.status(403).json({ error: 'System is in lockdown mode' });
+    }
+    const ip = getClientIp(req);
+    const ua = getUserAgent(req);
+    const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
+    const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+    if (blockedIp || blockedDevice) {
+      return res.status(403).json({ error: 'Access blocked' });
+    }
+    const sessionId = payload.sid;
+    const session = data.sessions.find((entry) => entry.id === sessionId);
+    if (!session || !session.active || session.type !== 'user') {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+    session.lastSeenAt = nowIso();
+    await saveData(data);
     req.userId = payload.sub;
+    req.sessionId = sessionId;
     return next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid token' });
@@ -1011,8 +1168,24 @@ const adminAuthMiddleware = async (req, res, next) => {
     if (payload?.type !== 'admin') {
       return res.status(403).json({ error: 'Invalid admin token' });
     }
+    const data = await loadData();
+    const ip = getClientIp(req);
+    const ua = getUserAgent(req);
+    const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
+    const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+    if (payload.role !== 'super_admin' && (blockedIp || blockedDevice)) {
+      return res.status(403).json({ error: 'Access blocked' });
+    }
+    const sessionId = payload.sid;
+    const session = data.sessions.find((entry) => entry.id === sessionId);
+    if (!session || !session.active || session.type !== 'admin') {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+    session.lastSeenAt = nowIso();
+    await saveData(data);
     req.adminId = payload.sub;
     req.adminRole = payload.role;
+    req.sessionId = sessionId;
     return next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid admin token' });
@@ -1030,10 +1203,29 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+app.use('/api', async (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (req.path === '/admin/auth/login') return next();
+  const data = await loadData();
+  const security = getSecurity(data);
+  if (security.lockdown && !req.path.startsWith('/admin') && !req.path.startsWith('/super-admin')) {
+    return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
+  const ip = getClientIp(req);
+  const ua = getUserAgent(req);
+  const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
+  const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+  if ((blockedIp || blockedDevice) && !req.path.startsWith('/super-admin')) {
+    return res.status(403).json({ error: 'Access blocked' });
+  }
+  return next();
+});
+
 const sanitizeAdmin = (admin) => ({
   id: admin.id,
   name: admin.name || '',
   username: admin.username,
+  email: admin.email || '',
   role: admin.role || 'admin',
   active: admin.active !== false,
   createdAt: admin.createdAt,
@@ -1058,6 +1250,17 @@ app.post('/api/admin/auth/login', async (req, res) => {
     );
 
     if (!admin || admin.active === false) {
+      data.loginAttempts.unshift({
+        id: nextId('LOGN', data.loginAttempts),
+        actorType: 'admin',
+        usernameOrEmail: String(username),
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+        ...parseDevice(getUserAgent(req)),
+        status: 'failed',
+        createdAt: nowIso()
+      });
+      await saveData(data);
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
@@ -1071,15 +1274,49 @@ app.post('/api/admin/auth/login', async (req, res) => {
 
     const ok = await bcrypt.compare(String(password), String(admin.passwordHash));
     if (!ok) {
+      data.loginAttempts.unshift({
+        id: nextId('LOGN', data.loginAttempts),
+        actorType: 'admin',
+        usernameOrEmail: String(username),
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+        ...parseDevice(getUserAgent(req)),
+        status: 'failed',
+        createdAt: nowIso()
+      });
+      await saveData(data);
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
     const now = new Date().toISOString();
     admin.lastLoginAt = now;
     admin.updatedAt = now;
+    const session = {
+      id: nextId('SESS', data.sessions),
+      type: 'admin',
+      actorId: admin.id,
+      role: admin.role,
+      ip: getClientIp(req),
+      userAgent: getUserAgent(req),
+      ...parseDevice(getUserAgent(req)),
+      active: true,
+      createdAt: now,
+      lastSeenAt: now
+    };
+    data.sessions.unshift(session);
+    data.loginAttempts.unshift({
+      id: nextId('LOGN', data.loginAttempts),
+      actorType: 'admin',
+      usernameOrEmail: String(username),
+      ip: getClientIp(req),
+      userAgent: getUserAgent(req),
+      ...parseDevice(getUserAgent(req)),
+      status: 'success',
+      createdAt: now
+    });
     await saveData(data);
 
-    const token = jwt.sign({ sub: admin.id, role: admin.role, type: 'admin' }, JWT_SECRET, {
+    const token = jwt.sign({ sub: admin.id, role: admin.role, type: 'admin', sid: session.id }, JWT_SECRET, {
       expiresIn: '8h'
     });
     return res.json({ token, admin: sanitizeAdmin(admin) });
@@ -1104,9 +1341,9 @@ app.get('/api/super-admin/admins', async (req, res) => {
 });
 
 app.post('/api/super-admin/admins', async (req, res) => {
-  const { name, username, password, role } = req.body || {};
-  if (!name || !username || !password) {
-    return res.status(400).json({ error: 'Name, username, and password are required' });
+  const { name, username, email, password, role } = req.body || {};
+  if (!name || !username || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, username, and password are required' });
   }
 
   const data = await loadData();
@@ -1123,6 +1360,7 @@ app.post('/api/super-admin/admins', async (req, res) => {
     id: nextId('ADMIN', data.admins),
     name: String(name),
     username: String(username),
+    email: String(email),
     passwordHash,
     role: role === 'super_admin' ? 'super_admin' : 'admin',
     active: true,
@@ -1130,12 +1368,19 @@ app.post('/api/super-admin/admins', async (req, res) => {
   };
   data.admins.unshift(admin);
   await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'admin_created',
+    target: admin.id,
+    metadata: { username: admin.username, role: admin.role }
+  });
   return res.status(201).json({ admin: sanitizeAdmin(admin) });
 });
 
 app.patch('/api/super-admin/admins/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, username, password, role, active } = req.body || {};
+  const { name, username, email, password, role, active } = req.body || {};
   const data = await loadData();
   const admin = data.admins.find((entry) => entry.id === id);
   if (!admin) {
@@ -1153,6 +1398,7 @@ app.patch('/api/super-admin/admins/:id', async (req, res) => {
   }
 
   if (name !== undefined) admin.name = String(name);
+  if (email !== undefined) admin.email = String(email);
   if (role) admin.role = role === 'super_admin' ? 'super_admin' : 'admin';
   if (typeof active === 'boolean') admin.active = active;
   if (password) {
@@ -1160,6 +1406,13 @@ app.patch('/api/super-admin/admins/:id', async (req, res) => {
   }
   admin.updatedAt = new Date().toISOString();
   await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'admin_updated',
+    target: admin.id,
+    metadata: { username: admin.username, role: admin.role, active: admin.active }
+  });
   return res.json({ admin: sanitizeAdmin(admin) });
 });
 
@@ -1184,6 +1437,13 @@ app.delete('/api/super-admin/admins/:id', async (req, res) => {
 
   data.admins = data.admins.filter((entry) => entry.id !== id);
   await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'admin_deleted',
+    target: id,
+    metadata: { username: admin.username }
+  });
   return res.json({ ok: true });
 });
 
@@ -1199,10 +1459,138 @@ app.post('/api/super-admin/security/lockdown', async (req, res) => {
   const security = getSecurity(data);
   security.lockdown = Boolean(enabled);
   security.lockdownReason = String(reason || '');
-  security.updatedAt = new Date().toISOString();
+  security.updatedAt = nowIso();
   security.updatedBy = req.adminId || '';
   await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: security.lockdown ? 'lockdown_enabled' : 'lockdown_disabled',
+    target: 'system',
+    metadata: { reason: security.lockdownReason }
+  });
   return res.json({ security });
+});
+
+app.get('/api/super-admin/security/logs', async (req, res) => {
+  const data = await loadData();
+  const limit = Math.min(Number(req.query.limit || 200), 1000);
+  return res.json({ logs: data.auditLogs.slice(0, limit) });
+});
+
+app.get('/api/super-admin/security/login-attempts', async (req, res) => {
+  const data = await loadData();
+  const limit = Math.min(Number(req.query.limit || 200), 1000);
+  return res.json({ attempts: data.loginAttempts.slice(0, limit) });
+});
+
+app.get('/api/super-admin/security/sessions', async (req, res) => {
+  const data = await loadData();
+  return res.json({ sessions: data.sessions.filter((s) => s.active !== false) });
+});
+
+app.get('/api/super-admin/security/blocklist', async (req, res) => {
+  const data = await loadData();
+  return res.json({ blockedIps: data.blockedIps, blockedDevices: data.blockedDevices });
+});
+
+app.post('/api/super-admin/security/sessions/:id/terminate', async (req, res) => {
+  const data = await loadData();
+  const session = data.sessions.find((entry) => entry.id === req.params.id);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  session.active = false;
+  session.lastSeenAt = nowIso();
+  await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'session_terminated',
+    target: session.id,
+    metadata: { type: session.type, actorId: session.actorId }
+  });
+  return res.json({ ok: true });
+});
+
+app.post('/api/super-admin/security/block-ip', async (req, res) => {
+  const { ip, reason } = req.body || {};
+  if (!ip) return res.status(400).json({ error: 'IP required' });
+  const data = await loadData();
+  if (!data.blockedIps.find((entry) => entry.ip === ip)) {
+    data.blockedIps.unshift({
+      id: nextId('BIP', data.blockedIps),
+      ip,
+      reason: String(reason || ''),
+      createdAt: nowIso(),
+      createdBy: req.adminId || ''
+    });
+    await saveData(data);
+    await addAuditLog(data, {
+      actorId: req.adminId,
+      actorRole: req.adminRole,
+      action: 'ip_blocked',
+      target: ip,
+      metadata: { reason: String(reason || '') }
+    });
+  }
+  return res.json({ blockedIps: data.blockedIps });
+});
+
+app.post('/api/super-admin/security/unblock-ip', async (req, res) => {
+  const { ip } = req.body || {};
+  if (!ip) return res.status(400).json({ error: 'IP required' });
+  const data = await loadData();
+  data.blockedIps = data.blockedIps.filter((entry) => entry.ip !== ip);
+  await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'ip_unblocked',
+    target: ip,
+    metadata: {}
+  });
+  return res.json({ blockedIps: data.blockedIps });
+});
+
+app.post('/api/super-admin/security/block-device', async (req, res) => {
+  const { userAgent, reason } = req.body || {};
+  if (!userAgent) return res.status(400).json({ error: 'Device required' });
+  const data = await loadData();
+  if (!data.blockedDevices.find((entry) => entry.userAgent === userAgent)) {
+    data.blockedDevices.unshift({
+      id: nextId('BDEV', data.blockedDevices),
+      userAgent,
+      reason: String(reason || ''),
+      createdAt: nowIso(),
+      createdBy: req.adminId || ''
+    });
+    await saveData(data);
+    await addAuditLog(data, {
+      actorId: req.adminId,
+      actorRole: req.adminRole,
+      action: 'device_blocked',
+      target: userAgent,
+      metadata: { reason: String(reason || '') }
+    });
+  }
+  return res.json({ blockedDevices: data.blockedDevices });
+});
+
+app.post('/api/super-admin/security/unblock-device', async (req, res) => {
+  const { userAgent } = req.body || {};
+  if (!userAgent) return res.status(400).json({ error: 'Device required' });
+  const data = await loadData();
+  data.blockedDevices = data.blockedDevices.filter((entry) => entry.userAgent !== userAgent);
+  await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'device_unblocked',
+    target: userAgent,
+    metadata: {}
+  });
+  return res.json({ blockedDevices: data.blockedDevices });
 });
 
 
@@ -1216,6 +1604,13 @@ app.post('/api/auth/register', async (req, res) => {
   const security = getSecurity(data);
   if (security.lockdown) {
     return res.status(403).json({ error: 'System is in lockdown mode' });
+  }
+  const ip = getClientIp(req);
+  const ua = getUserAgent(req);
+  const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
+  const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+  if (blockedIp || blockedDevice) {
+    return res.status(403).json({ error: 'Access blocked' });
   }
   const existing = data.users.find(
     (user) => user.email.toLowerCase() === String(email).toLowerCase()
@@ -1252,9 +1647,33 @@ app.post('/api/auth/register', async (req, res) => {
 
   data.customers.push(customer);
   data.users.push(user);
+  const now = nowIso();
+  const session = {
+    id: nextId('SESS', data.sessions),
+    type: 'user',
+    actorId: user.id,
+    role: 'user',
+    ip,
+    userAgent: ua,
+    ...parseDevice(ua),
+    active: true,
+    createdAt: now,
+    lastSeenAt: now
+  };
+  data.sessions.unshift(session);
+  data.loginAttempts.unshift({
+    id: nextId('LOGN', data.loginAttempts),
+    actorType: 'user',
+    usernameOrEmail: String(email),
+    ip,
+    userAgent: ua,
+    ...parseDevice(ua),
+    status: 'success',
+    createdAt: now
+  });
   await saveData(data);
 
-  const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ sub: user.id, type: 'user', sid: session.id }, JWT_SECRET, { expiresIn: '7d' });
   return res.json({
     token,
     user: {
@@ -1458,19 +1877,74 @@ app.post('/api/auth/login', async (req, res) => {
   if (security.lockdown) {
     return res.status(403).json({ error: 'System is in lockdown mode' });
   }
+  const ip = getClientIp(req);
+  const ua = getUserAgent(req);
+  const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
+  const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+  if (blockedIp || blockedDevice) {
+    return res.status(403).json({ error: 'Access blocked' });
+  }
   const user = data.users.find(
     (entry) => entry.email.toLowerCase() === String(email).toLowerCase()
   );
   if (!user) {
+    data.loginAttempts.unshift({
+      id: nextId('LOGN', data.loginAttempts),
+      actorType: 'user',
+      usernameOrEmail: String(email),
+      ip,
+      userAgent: ua,
+      ...parseDevice(ua),
+      status: 'failed',
+      createdAt: nowIso()
+    });
+    await saveData(data);
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
   const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) {
+    data.loginAttempts.unshift({
+      id: nextId('LOGN', data.loginAttempts),
+      actorType: 'user',
+      usernameOrEmail: String(email),
+      ip,
+      userAgent: ua,
+      ...parseDevice(ua),
+      status: 'failed',
+      createdAt: nowIso()
+    });
+    await saveData(data);
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '7d' });
+  const now = nowIso();
+  const session = {
+    id: nextId('SESS', data.sessions),
+    type: 'user',
+    actorId: user.id,
+    role: 'user',
+    ip,
+    userAgent: ua,
+    ...parseDevice(ua),
+    active: true,
+    createdAt: now,
+    lastSeenAt: now
+  };
+  data.sessions.unshift(session);
+  data.loginAttempts.unshift({
+    id: nextId('LOGN', data.loginAttempts),
+    actorType: 'user',
+    usernameOrEmail: String(email),
+    ip,
+    userAgent: ua,
+    ...parseDevice(ua),
+    status: 'success',
+    createdAt: now
+  });
+  await saveData(data);
+
+  const token = jwt.sign({ sub: user.id, type: 'user', sid: session.id }, JWT_SECRET, { expiresIn: '7d' });
   return res.json({
     token,
     user: {
