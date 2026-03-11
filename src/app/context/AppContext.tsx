@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { toApiUrl, toAssetUrl } from '../lib/api';
+import { getDeviceHeaders } from '../lib/device';
 
 // Types
 export interface Product {
@@ -665,7 +666,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchJson('/api/admin/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
         body: JSON.stringify({ username, password })
       });
       setAdminToken(data.token || null);

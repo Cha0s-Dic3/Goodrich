@@ -457,7 +457,10 @@ const loginAttemptSchema = new mongoose.Schema(
     actorType: { type: String, default: '' },
     usernameOrEmail: { type: String, default: '' },
     ip: { type: String, default: '' },
+    country: { type: String, default: '' },
     userAgent: { type: String, default: '' },
+    deviceId: { type: String, default: '' },
+    deviceName: { type: String, default: '' },
     device: { type: String, default: '' },
     os: { type: String, default: '' },
     browser: { type: String, default: '' },
@@ -474,7 +477,10 @@ const sessionSchema = new mongoose.Schema(
     actorId: { type: String, default: '' },
     role: { type: String, default: '' },
     ip: { type: String, default: '' },
+    country: { type: String, default: '' },
     userAgent: { type: String, default: '' },
+    deviceId: { type: String, default: '' },
+    deviceName: { type: String, default: '' },
     device: { type: String, default: '' },
     os: { type: String, default: '' },
     browser: { type: String, default: '' },
@@ -500,6 +506,7 @@ const blockedDeviceSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, index: true, unique: true },
     userAgent: { type: String, default: '' },
+    deviceId: { type: String, default: '' },
     reason: { type: String, default: '' },
     createdAt: { type: String, default: '' },
     createdBy: { type: String, default: '' }
@@ -744,6 +751,17 @@ const getClientIp = (req) => {
 
 const getUserAgent = (req) => String(req.headers['user-agent'] || '');
 
+const getCountry = (req) =>
+  String(
+    req.headers['cf-ipcountry'] ||
+      req.headers['x-vercel-ip-country'] ||
+      req.headers['x-country'] ||
+      ''
+  );
+
+const getDeviceId = (req) => String(req.headers['x-device-id'] || '');
+const getDeviceName = (req) => String(req.headers['x-device-name'] || '');
+
 const parseDevice = (ua) => {
   const lower = ua.toLowerCase();
   const os =
@@ -772,6 +790,41 @@ const addAuditLog = async (data, entry) => {
   if (data.auditLogs.length > 2000) {
     data.auditLogs = data.auditLogs.slice(0, 2000);
   }
+  await saveData(data);
+};
+
+const maybeAlert = async (data, { ip, usernameOrEmail, actorType }) => {
+  const windowMs = 10 * 60 * 1000;
+  const cutoff = Date.now() - windowMs;
+  const recentFailures = data.loginAttempts.filter(
+    (entry) =>
+      entry.status === 'failed' &&
+      entry.actorType === actorType &&
+      Number(new Date(entry.createdAt || 0)) >= cutoff &&
+      (entry.ip === ip || entry.usernameOrEmail === usernameOrEmail)
+  );
+  if (recentFailures.length < 5) return;
+
+  const alreadyAlerted = data.auditLogs.some((log) => {
+    if (log.action !== 'security_alert') return false;
+    if (log.metadata?.ip !== ip && log.metadata?.usernameOrEmail !== usernameOrEmail) return false;
+    return Number(new Date(log.createdAt || 0)) >= cutoff;
+  });
+  if (alreadyAlerted) return;
+
+  data.auditLogs.unshift({
+    id: nextId('LOG', data.auditLogs),
+    createdAt: nowIso(),
+    actorId: '',
+    actorRole: 'system',
+    action: 'security_alert',
+    target: actorType,
+    metadata: {
+      ip,
+      usernameOrEmail,
+      reason: 'multiple_failed_logins'
+    }
+  });
   await saveData(data);
 };
 
@@ -1137,8 +1190,11 @@ const authMiddleware = async (req, res, next) => {
     }
     const ip = getClientIp(req);
     const ua = getUserAgent(req);
+    const deviceId = getDeviceId(req);
     const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
-    const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+    const blockedDevice = data.blockedDevices.find(
+      (entry) => entry.userAgent === ua || (entry.deviceId && entry.deviceId === deviceId)
+    );
     if (blockedIp || blockedDevice) {
       return res.status(403).json({ error: 'Access blocked' });
     }
@@ -1171,8 +1227,11 @@ const adminAuthMiddleware = async (req, res, next) => {
     const data = await loadData();
     const ip = getClientIp(req);
     const ua = getUserAgent(req);
+    const deviceId = getDeviceId(req);
     const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
-    const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+    const blockedDevice = data.blockedDevices.find(
+      (entry) => entry.userAgent === ua || (entry.deviceId && entry.deviceId === deviceId)
+    );
     if (payload.role !== 'super_admin' && (blockedIp || blockedDevice)) {
       return res.status(403).json({ error: 'Access blocked' });
     }
@@ -1213,8 +1272,17 @@ app.use('/api', async (req, res, next) => {
   }
   const ip = getClientIp(req);
   const ua = getUserAgent(req);
+  const deviceId = getDeviceId(req);
+  const deviceName = getDeviceName(req);
+  const country = getCountry(req);
+  const deviceId = getDeviceId(req);
+  const deviceName = getDeviceName(req);
+  const country = getCountry(req);
+  const deviceId = getDeviceId(req);
   const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
-  const blockedDevice = data.blockedDevices.find((entry) => entry.userAgent === ua);
+  const blockedDevice = data.blockedDevices.find(
+    (entry) => entry.userAgent === ua || (entry.deviceId && entry.deviceId === deviceId)
+  );
   if ((blockedIp || blockedDevice) && !req.path.startsWith('/super-admin')) {
     return res.status(403).json({ error: 'Access blocked' });
   }
@@ -1245,6 +1313,11 @@ app.post('/api/admin/auth/login', async (req, res) => {
       data = await loadData();
     }
     const security = getSecurity(data);
+    const ip = getClientIp(req);
+    const ua = getUserAgent(req);
+    const deviceId = getDeviceId(req);
+    const deviceName = getDeviceName(req);
+    const country = getCountry(req);
     const admin = data.admins.find(
       (entry) => entry.username.toLowerCase() === String(username).toLowerCase()
     );
@@ -1254,13 +1327,17 @@ app.post('/api/admin/auth/login', async (req, res) => {
         id: nextId('LOGN', data.loginAttempts),
         actorType: 'admin',
         usernameOrEmail: String(username),
-        ip: getClientIp(req),
-        userAgent: getUserAgent(req),
-        ...parseDevice(getUserAgent(req)),
+        ip,
+        country,
+        userAgent: ua,
+        deviceId,
+        deviceName,
+        ...parseDevice(ua),
         status: 'failed',
         createdAt: nowIso()
       });
       await saveData(data);
+      await maybeAlert(data, { ip, usernameOrEmail: String(username), actorType: 'admin' });
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
@@ -1278,13 +1355,17 @@ app.post('/api/admin/auth/login', async (req, res) => {
         id: nextId('LOGN', data.loginAttempts),
         actorType: 'admin',
         usernameOrEmail: String(username),
-        ip: getClientIp(req),
-        userAgent: getUserAgent(req),
-        ...parseDevice(getUserAgent(req)),
+        ip,
+        country,
+        userAgent: ua,
+        deviceId,
+        deviceName,
+        ...parseDevice(ua),
         status: 'failed',
         createdAt: nowIso()
       });
       await saveData(data);
+      await maybeAlert(data, { ip, usernameOrEmail: String(username), actorType: 'admin' });
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
@@ -1296,9 +1377,12 @@ app.post('/api/admin/auth/login', async (req, res) => {
       type: 'admin',
       actorId: admin.id,
       role: admin.role,
-      ip: getClientIp(req),
-      userAgent: getUserAgent(req),
-      ...parseDevice(getUserAgent(req)),
+      ip,
+      country,
+      userAgent: ua,
+      deviceId,
+      deviceName,
+      ...parseDevice(ua),
       active: true,
       createdAt: now,
       lastSeenAt: now
@@ -1308,9 +1392,12 @@ app.post('/api/admin/auth/login', async (req, res) => {
       id: nextId('LOGN', data.loginAttempts),
       actorType: 'admin',
       usernameOrEmail: String(username),
-      ip: getClientIp(req),
-      userAgent: getUserAgent(req),
-      ...parseDevice(getUserAgent(req)),
+      ip,
+      country,
+      userAgent: ua,
+      deviceId,
+      deviceName,
+      ...parseDevice(ua),
       status: 'success',
       createdAt: now
     });
@@ -1513,6 +1600,27 @@ app.post('/api/super-admin/security/sessions/:id/terminate', async (req, res) =>
   return res.json({ ok: true });
 });
 
+app.post('/api/super-admin/security/sessions/terminate-all', async (req, res) => {
+  const data = await loadData();
+  let terminated = 0;
+  data.sessions.forEach((session) => {
+    if (!session.active) return;
+    if (session.role === 'super_admin') return;
+    session.active = false;
+    session.lastSeenAt = nowIso();
+    terminated += 1;
+  });
+  await saveData(data);
+  await addAuditLog(data, {
+    actorId: req.adminId,
+    actorRole: req.adminRole,
+    action: 'sessions_terminated_all',
+    target: 'system',
+    metadata: { terminated }
+  });
+  return res.json({ terminated });
+});
+
 app.post('/api/super-admin/security/block-ip', async (req, res) => {
   const { ip, reason } = req.body || {};
   if (!ip) return res.status(400).json({ error: 'IP required' });
@@ -1554,13 +1662,14 @@ app.post('/api/super-admin/security/unblock-ip', async (req, res) => {
 });
 
 app.post('/api/super-admin/security/block-device', async (req, res) => {
-  const { userAgent, reason } = req.body || {};
-  if (!userAgent) return res.status(400).json({ error: 'Device required' });
+  const { userAgent, deviceId, reason } = req.body || {};
+  if (!userAgent && !deviceId) return res.status(400).json({ error: 'Device required' });
   const data = await loadData();
-  if (!data.blockedDevices.find((entry) => entry.userAgent === userAgent)) {
+  if (!data.blockedDevices.find((entry) => entry.userAgent === userAgent || entry.deviceId === deviceId)) {
     data.blockedDevices.unshift({
       id: nextId('BDEV', data.blockedDevices),
-      userAgent,
+      userAgent: String(userAgent || ''),
+      deviceId: String(deviceId || ''),
       reason: String(reason || ''),
       createdAt: nowIso(),
       createdBy: req.adminId || ''
@@ -1570,24 +1679,26 @@ app.post('/api/super-admin/security/block-device', async (req, res) => {
       actorId: req.adminId,
       actorRole: req.adminRole,
       action: 'device_blocked',
-      target: userAgent,
-      metadata: { reason: String(reason || '') }
+      target: userAgent || deviceId,
+      metadata: { reason: String(reason || ''), deviceId: String(deviceId || '') }
     });
   }
   return res.json({ blockedDevices: data.blockedDevices });
 });
 
 app.post('/api/super-admin/security/unblock-device', async (req, res) => {
-  const { userAgent } = req.body || {};
-  if (!userAgent) return res.status(400).json({ error: 'Device required' });
+  const { userAgent, deviceId } = req.body || {};
+  if (!userAgent && !deviceId) return res.status(400).json({ error: 'Device required' });
   const data = await loadData();
-  data.blockedDevices = data.blockedDevices.filter((entry) => entry.userAgent !== userAgent);
+  data.blockedDevices = data.blockedDevices.filter(
+    (entry) => entry.userAgent !== userAgent && entry.deviceId !== deviceId
+  );
   await saveData(data);
   await addAuditLog(data, {
     actorId: req.adminId,
     actorRole: req.adminRole,
     action: 'device_unblocked',
-    target: userAgent,
+    target: userAgent || deviceId,
     metadata: {}
   });
   return res.json({ blockedDevices: data.blockedDevices });
@@ -1655,6 +1766,9 @@ app.post('/api/auth/register', async (req, res) => {
     role: 'user',
     ip,
     userAgent: ua,
+    country,
+    deviceId,
+    deviceName,
     ...parseDevice(ua),
     active: true,
     createdAt: now,
@@ -1667,6 +1781,9 @@ app.post('/api/auth/register', async (req, res) => {
     usernameOrEmail: String(email),
     ip,
     userAgent: ua,
+    country,
+    deviceId,
+    deviceName,
     ...parseDevice(ua),
     status: 'success',
     createdAt: now
@@ -1894,11 +2011,15 @@ app.post('/api/auth/login', async (req, res) => {
       usernameOrEmail: String(email),
       ip,
       userAgent: ua,
+      country,
+      deviceId,
+      deviceName,
       ...parseDevice(ua),
       status: 'failed',
       createdAt: nowIso()
     });
     await saveData(data);
+    await maybeAlert(data, { ip, usernameOrEmail: String(email), actorType: 'user' });
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
@@ -1910,11 +2031,15 @@ app.post('/api/auth/login', async (req, res) => {
       usernameOrEmail: String(email),
       ip,
       userAgent: ua,
+      country,
+      deviceId,
+      deviceName,
       ...parseDevice(ua),
       status: 'failed',
       createdAt: nowIso()
     });
     await saveData(data);
+    await maybeAlert(data, { ip, usernameOrEmail: String(email), actorType: 'user' });
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
@@ -1926,6 +2051,9 @@ app.post('/api/auth/login', async (req, res) => {
     role: 'user',
     ip,
     userAgent: ua,
+    country,
+    deviceId,
+    deviceName,
     ...parseDevice(ua),
     active: true,
     createdAt: now,
@@ -1938,6 +2066,9 @@ app.post('/api/auth/login', async (req, res) => {
     usernameOrEmail: String(email),
     ip,
     userAgent: ua,
+    country,
+    deviceId,
+    deviceName,
     ...parseDevice(ua),
     status: 'success',
     createdAt: now
@@ -2596,6 +2727,25 @@ app.get('/api/admin/customers', async (req, res) => {
 });
 
 if (NODE_ENV === 'production') {
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    const allow = ['/setup-security', '/admin-dashboard'];
+    const isAllowed =
+      allow.includes(req.path) ||
+      req.path.startsWith('/assets/') ||
+      req.path.startsWith('/favicon') ||
+      req.path.startsWith('/goodrich-logo.png') ||
+      req.path.startsWith('/robots.txt') ||
+      req.path.startsWith('/sitemap.xml');
+    if (isAllowed) return next();
+    const data = await loadData();
+    const security = getSecurity(data);
+    if (security.lockdown) {
+      res.status(503).send('System is in lockdown mode.');
+      return;
+    }
+    return next();
+  });
   app.use(express.static(DIST_PATH));
 }
 

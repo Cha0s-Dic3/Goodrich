@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Shield, Lock, Unlock, UserPlus, Trash2, KeyRound } from 'lucide-react';
+import { Shield, Lock, Unlock, UserPlus, Trash2, KeyRound, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -39,7 +39,8 @@ interface LoginAttemptEntry {
   actorType: string;
   usernameOrEmail: string;
   ip: string;
-  device?: string;
+  country?: string;
+  deviceName?: string;
   os?: string;
   browser?: string;
   status: string;
@@ -52,7 +53,8 @@ interface SessionEntry {
   actorId: string;
   role: string;
   ip: string;
-  device?: string;
+  country?: string;
+  deviceName?: string;
   os?: string;
   browser?: string;
   createdAt: string;
@@ -69,6 +71,7 @@ interface BlockedIpEntry {
 interface BlockedDeviceEntry {
   id: string;
   userAgent: string;
+  deviceId?: string;
   reason?: string;
 }
 
@@ -120,17 +123,23 @@ export function SetupSecurityPage() {
 
   const loadLogs = async () => {
     try {
-      const [logsRes, attemptsRes, sessionsRes] = await Promise.all([
+      const [logsRes, attemptsRes, sessionsRes, blockRes] = await Promise.all([
         fetch('/api/super-admin/security/logs?limit=200', { headers: authHeaders }),
         fetch('/api/super-admin/security/login-attempts?limit=200', { headers: authHeaders }),
-        fetch('/api/super-admin/security/sessions', { headers: authHeaders })
+        fetch('/api/super-admin/security/sessions', { headers: authHeaders }),
+        fetch('/api/super-admin/security/blocklist', { headers: authHeaders })
       ]);
       const logsData = await logsRes.json();
       const attemptsData = await attemptsRes.json();
       const sessionsData = await sessionsRes.json();
+      const blockData = await blockRes.json();
       if (logsRes.ok) setAuditLogs(logsData.logs || []);
       if (attemptsRes.ok) setLoginAttempts(attemptsData.attempts || []);
       if (sessionsRes.ok) setSessions(sessionsData.sessions || []);
+      if (blockRes.ok) {
+        setBlockedIps(blockData.blockedIps || []);
+        setBlockedDevices(blockData.blockedDevices || []);
+      }
     } catch {
       // ignore
     }
@@ -265,6 +274,21 @@ export function SetupSecurityPage() {
       toast.success('Session terminated.');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to terminate session');
+    }
+  };
+
+  const terminateAllSessions = async () => {
+    try {
+      const res = await fetch('/api/super-admin/security/sessions/terminate-all', {
+        method: 'POST',
+        headers: authHeaders
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to terminate sessions');
+      setSessions((prev) => prev.filter((session) => session.role === 'super_admin'));
+      toast.success(`Terminated ${data.terminated || 0} session(s).`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to terminate sessions');
     }
   };
 
@@ -516,7 +540,12 @@ export function SetupSecurityPage() {
         </Card>
 
         <Card className="p-6 bg-white border-2 border-[#D2B48C]">
-          <h2 className="text-2xl text-[#3D2817] mb-4">Active Sessions</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl text-[#3D2817]">Active Sessions</h2>
+            <Button size="sm" variant="outline" onClick={terminateAllSessions}>
+              <Power className="h-4 w-4 mr-1" /> Terminate All
+            </Button>
+          </div>
           {sessions.length === 0 ? (
             <p className="text-[#6B5344]">No active sessions.</p>
           ) : (
@@ -524,7 +553,7 @@ export function SetupSecurityPage() {
               {sessions.map((session) => (
                 <div key={session.id} className="flex flex-col md:flex-row md:items-center md:justify-between py-3 gap-2">
                   <div className="text-sm text-[#6B5344]">
-                    {session.type} • {session.actorId} • {session.ip} • {session.browser} • {session.os}
+                    {session.type} • {session.actorId} • {session.ip} • {session.country || 'Unknown'} • {session.deviceName || 'Device'} • {session.browser} • {session.os}
                   </div>
                   <Button size="sm" variant="outline" onClick={() => terminateSession(session.id)}>
                     Terminate
@@ -562,7 +591,7 @@ export function SetupSecurityPage() {
               <div className="mt-3 space-y-2">
                 {blockedDevices.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate">{entry.userAgent}</span>
+                    <span className="truncate">{entry.deviceId || entry.userAgent}</span>
                     <Button size="sm" variant="outline" onClick={() => unblockDevice(entry.userAgent)}>Unblock</Button>
                   </div>
                 ))}
@@ -587,7 +616,7 @@ export function SetupSecurityPage() {
           <div className="space-y-2 max-h-80 overflow-auto text-sm text-[#6B5344]">
             {loginAttempts.map((attempt) => (
               <div key={attempt.id}>
-                {attempt.createdAt} • {attempt.actorType} • {attempt.usernameOrEmail} • {attempt.status} • {attempt.ip}
+                {attempt.createdAt} • {attempt.actorType} • {attempt.usernameOrEmail} • {attempt.status} • {attempt.ip} • {attempt.country || 'Unknown'} • {attempt.deviceName || 'Device'}
               </div>
             ))}
           </div>

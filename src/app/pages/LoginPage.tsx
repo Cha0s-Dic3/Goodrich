@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
+import { getDeviceHeaders } from '../lib/device';
 
 export function LoginPage() {
   const { setCurrentPage, userLogin, isUserLoggedIn } = useApp();
@@ -72,7 +73,7 @@ export function LoginPage() {
 
     fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
       body: JSON.stringify(payload)
     })
       .then(async (res) => {
