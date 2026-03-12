@@ -30,6 +30,9 @@ export function HomePage() {
             <h1 className="text-5xl md:text-6xl font-bold text-[#FFFDD0] mb-6 leading-tight">
               {t('home.heroTitle1')}<br />{t('home.heroTitle2')}
             </h1>
+            <p className="text-sm uppercase tracking-wide text-[#FFD700] mb-3">
+              {t('home.heroLocationLine')}
+            </p>
             <p className="text-xl text-[#FAF3E0] mb-8 leading-relaxed">
               {t('home.heroDescription')}
             </p>
@@ -231,6 +234,30 @@ export function HomePage() {
                 <p className="font-semibold text-[#8B4513]">{t('home.testimonials.three.name')}</p>
                 <p className="text-sm text-[#6B5344]">{t('home.testimonials.three.place')}</p>
               </div>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16 bg-[#FFFDD0]">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-10">
+            <h2 className="text-4xl mb-4 text-[#3D2817]">{t('home.faqTitle')}</h2>
+            <p className="text-lg text-[#6B5344]">{t('home.faqSubtitle')}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+              <h3 className="text-lg font-semibold text-[#3D2817] mb-3">{t('home.faq1Question')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.faq1Answer')}</p>
+            </Card>
+            <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+              <h3 className="text-lg font-semibold text-[#3D2817] mb-3">{t('home.faq2Question')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.faq2Answer')}</p>
+            </Card>
+            <Card className="p-6 bg-white border-2 border-[#D2B48C]">
+              <h3 className="text-lg font-semibold text-[#3D2817] mb-3">{t('home.faq3Question')}</h3>
+              <p className="text-sm text-[#6B5344]">{t('home.faq3Answer')}</p>
             </Card>
           </div>
         </div>
