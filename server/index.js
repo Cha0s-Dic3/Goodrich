@@ -1275,10 +1275,6 @@ app.use('/api', async (req, res, next) => {
   const deviceId = getDeviceId(req);
   const deviceName = getDeviceName(req);
   const country = getCountry(req);
-  const deviceId = getDeviceId(req);
-  const deviceName = getDeviceName(req);
-  const country = getCountry(req);
-  const deviceId = getDeviceId(req);
   const blockedIp = data.blockedIps.find((entry) => entry.ip === ip);
   const blockedDevice = data.blockedDevices.find(
     (entry) => entry.userAgent === ua || (entry.deviceId && entry.deviceId === deviceId)
